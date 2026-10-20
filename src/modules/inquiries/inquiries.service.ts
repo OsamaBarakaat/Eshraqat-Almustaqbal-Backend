@@ -82,13 +82,16 @@ export class InquiriesService {
     if (relatedPropertyId) where.relatedPropertyId = relatedPropertyId;
     if (assignedEmployeeId) where.assignedEmployeeId = assignedEmployeeId;
 
+    const actualSortBy =
+      !query.sortBy || query.sortBy === "createdAt" ? "submittedAt" : query.sortBy;
+
     const [rawItems, total] = await Promise.all([
       this.prisma.inquiry.findMany({
         where,
         include: this.inquiryIncludes,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { [actualSortBy]: sortOrder },
       }),
       this.prisma.inquiry.count({ where }),
     ]);
