@@ -1,0 +1,563 @@
+// Prisma Schema for Eshraqat Al-Mustaqbal Real Estate
+// Matches both the Admin Dashboard and the Future Public Website
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum RoleCode {
+  SUPER_ADMIN
+  MANAGER
+  PROPERTY_MANAGER
+  SALES_AGENT
+  CONTENT_EDITOR
+  CUSTOM
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ModuleType {
+  properties
+  projects
+  clients
+  inquiries
+  appointments
+  websiteContent
+  reports
+  team
+  settings
+  locations
+}
+
+enum ActionType {
+  view
+  create
+  edit
+  delete
+  publish
+  assign
+  managePermissions
+}
+
+enum PropertyCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  AGRICULTURAL
+}
+
+enum PropertyPurpose {
+  SALE
+  RENT
+}
+
+enum PropertyStatus {
+  PUBLISHED
+  DRAFT
+  ARCHIVED
+  SOLD
+  RENTED
+}
+
+enum FurnishingStatus {
+  FURNISHED
+  SEMI_FURNISHED
+  UNFURNISHED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  WEBSITE_INQUIRY
+  WHATSAPP
+  PHONE_CALL
+  REFERRAL
+  SOCIAL_MEDIA
+  WALK_IN
+}
+
+enum TimelineEventType {
+  CALL
+  NOTE
+  MEETING
+  STATUS_CHANGE
+  INQUIRY
+}
+
+enum AppointmentStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum InquiryStatus {
+  NEW
+  IN_PROGRESS
+  REPLIED
+  CLOSED
+}
+
+enum InquiryType {
+  PROPERTY_INQUIRY
+  GENERAL_CONTACT
+  PRICE_REQUEST
+  PARTNERSHIP
+}
+
+enum FaqCategory {
+  GENERAL
+  BUYING
+  SELLING
+  RENTING
+}
+
+enum SocialPlatform {
+  WHATSAPP
+  INSTAGRAM
+  FACEBOOK
+  SNAPCHAT
+  LINKEDIN
+  X
+  TIKTOK
+  YOUTUBE
+}
+
+// ==========================================
+// RBAC & USERS
+// ==========================================
+
+model Role {
+  id          String       @id @default(uuid())
+  code        RoleCode     @unique
+  titleArabic String
+  description String
+  isSystem    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users       User[]
+  permissions Permission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id        String     @id @default(uuid())
+  roleId    String
+  module    ModuleType
+  actions   ActionType[]
+
+  role      Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, module])
+  @@map("permissions")
+}
+
+model User {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  passwordHash  String
+  name          String
+  phone         String
+  avatar        String?
+  department    String?
+  status        UserStatus   @default(ACTIVE)
+  roleId        String
+  refreshToken  String?
+  lastActiveAt  DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  role          Role         @relation(fields: [roleId], references: [id])
+  appointments  Appointment[] @relation("AssignedAgentAppointments")
+  clients       Client[]      @relation("AssignedAgentClients")
+  inquiries     Inquiry[]     @relation("AssignedAgentInquiries")
+  auditLogs     AuditLog[]
+
+  @@map("admin_users")
+}
+
+// ==========================================
+// SAUDI GEOGRAPHIC LOCATIONS
+// ==========================================
+
+model Province {
+  id          String     @id @default(uuid())
+  nameArabic  String     @unique
+  nameEnglish String
+  country     String     @default("المملكة العربية السعودية")
+  enabled     Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  cities      City[]
+  properties  Property[]
+
+  @@map("provinces")
+}
+
+model City {
+  id          String     @id @default(uuid())
+  provinceId  String
+  nameArabic  String
+  nameEnglish String
+  enabled     Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  province    Province   @relation(fields: [provinceId], references: [id], onDelete: Cascade)
+  districts   District[]
+  properties  Property[]
+
+  @@unique([provinceId, nameArabic])
+  @@map("cities")
+}
+
+model District {
+  id          String     @id @default(uuid())
+  cityId      String
+  nameArabic  String
+  nameEnglish String
+  enabled     Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  city        City       @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  properties  Property[]
+
+  @@unique([cityId, nameArabic])
+  @@map("districts")
+}
+
+// ==========================================
+// PROPERTIES & MEDIA
+// ==========================================
+
+model Property {
+  id                  String             @id @default(uuid())
+  code                String             @unique // e.g. ESH-1001
+  title               String
+  shortDescription    String
+  fullDescription     String
+  category            PropertyCategory
+  purpose             PropertyPurpose
+  status              PropertyStatus     @default(PUBLISHED)
+
+  // Pricing & Discount
+  price               Decimal            @db.Decimal(14, 2)
+  currency            String             @default("ر.س")
+  originalPrice       Decimal?           @db.Decimal(14, 2)
+  discountPercentage  Int?
+  area                Decimal            @db.Decimal(10, 2)
+  areaUnit            String             @default("م²")
+  maintenanceFee      Decimal?           @db.Decimal(12, 2)
+
+  // Geographic Location
+  country             String             @default("المملكة العربية السعودية")
+  city                String
+  areaName            String
+  streetAddress       String?
+  latitude            Float?
+  longitude           Float?
+
+  provinceId          String?
+  cityId              String?
+  districtId          String?
+
+  // Adaptive Specs - Residential
+  residentialBedrooms    Int?
+  residentialBathrooms   Int?
+  residentialLivingRooms Int?
+  residentialFloor       Int?
+  residentialTotalFloors Int?
+  residentialFurnishing  FurnishingStatus?
+
+  // Adaptive Specs - Commercial
+  commercialCategory         String?
+  commercialSuitableActivity String?
+  commercialRoomsCount       Int?
+  commercialFloor            Int?
+
+  // Adaptive Specs - Agricultural
+  landClassification   String?
+  waterAvailability    Boolean?
+  waterSource          String?
+
+  // Features & Amenities
+  amenities            String[]          @default([])
+
+  // SEO & Public URL
+  seoTitle             String?
+  metaDescription      String?
+  slug                 String            @unique
+
+  // Stats & Performance
+  viewsCount           Int               @default(0)
+  inquiriesCount       Int               @default(0)
+  featured             Boolean           @default(false)
+
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  // Relations
+  province             Province?         @relation(fields: [provinceId], references: [id])
+  cityRel              City?             @relation(fields: [cityId], references: [id])
+  districtRel          District?         @relation(fields: [districtId], references: [id])
+  images               PropertyImage[]
+  appointments         Appointment[]
+  inquiries            Inquiry[]
+  clients              Client[]          @relation("InterestedProperty")
+
+  @@index([category, status])
+  @@index([purpose, status])
+  @@index([city, areaName])
+  @@index([price])
+  @@index([slug])
+  @@map("properties")
+}
+
+model PropertyImage {
+  id           String    @id @default(uuid())
+  propertyId   String
+  url          String
+  caption      String?
+  isPrimary    Boolean   @default(false)
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  property     Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, isPrimary])
+  @@map("property_images")
+}
+
+// ==========================================
+// APPOINTMENTS (VIEWINGS)
+// ==========================================
+
+model Appointment {
+  id                 String             @id @default(uuid())
+  customerName       String
+  customerPhone      String
+  customerEmail      String?
+  propertyId         String
+  requestedDate      DateTime           @db.Date
+  requestedTime      String             // HH:mm format
+  status             AppointmentStatus  @default(PENDING_CONFIRMATION)
+  assignedEmployeeId String?
+  notes              String?
+  rejectionReason    String?
+  cancellationReason String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  property           Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  assignedEmployee   User?              @relation("AssignedAgentAppointments", fields: [assignedEmployeeId], references: [id])
+
+  @@index([propertyId])
+  @@index([status, requestedDate])
+  @@map("appointments")
+}
+
+// ==========================================
+// CLIENTS & CRM
+// ==========================================
+
+model Client {
+  id                   String               @id @default(uuid())
+  name                 String
+  phone                String
+  email                String?
+  status               LeadStatus           @default(NEW)
+  source               LeadSource           @default(WEBSITE_INQUIRY)
+  budgetMin            Decimal?             @db.Decimal(14, 2)
+  budgetMax            Decimal?             @db.Decimal(14, 2)
+  preferredCategory    PropertyCategory?
+  preferredLocation    String?
+  interestedPropertyId String?
+  assignedEmployeeId   String?
+  notes                String?
+  lastActivityAt       DateTime             @default(now())
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  interestedProperty   Property?            @relation("InterestedProperty", fields: [interestedPropertyId], references: [id])
+  assignedEmployee     User?                @relation("AssignedAgentClients", fields: [assignedEmployeeId], references: [id])
+  timeline             ClientTimelineEvent[]
+
+  @@index([status])
+  @@index([phone])
+  @@map("clients")
+}
+
+model ClientTimelineEvent {
+  id          String            @id @default(uuid())
+  clientId    String
+  type        TimelineEventType
+  title       String
+  description String
+  authorName  String
+  createdAt   DateTime          @default(now())
+
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("client_timeline_events")
+}
+
+// ==========================================
+// INQUIRIES (FROM WEBSITE & WHATSAPP)
+// ==========================================
+
+model Inquiry {
+  id                 String         @id @default(uuid())
+  senderName         String
+  senderPhone        String
+  senderEmail        String?
+  type               InquiryType    @default(GENERAL_CONTACT)
+  relatedPropertyId  String?
+  subject            String
+  message            String
+  status             InquiryStatus  @default(NEW)
+  assignedEmployeeId String?
+  replyNotes         String?
+  submittedAt        DateTime       @default(now())
+  repliedAt          DateTime?
+
+  relatedProperty    Property?      @relation(fields: [relatedPropertyId], references: [id], onDelete: SetNull)
+  assignedEmployee   User?          @relation("AssignedAgentInquiries", fields: [assignedEmployeeId], references: [id])
+
+  @@index([status])
+  @@index([relatedPropertyId])
+  @@map("inquiries")
+}
+
+// ==========================================
+// WEBSITE CONTENT CMS (DASHBOARD CONTROLS WEBSITE)
+// ==========================================
+
+model Faq {
+  id           String      @id @default(uuid())
+  question     String
+  answer       String
+  displayOrder Int         @default(0)
+  published    Boolean     @default(true)
+  category     FaqCategory @default(GENERAL)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("faqs")
+}
+
+model WebsitePage {
+  id          String    @id @default(uuid())
+  slug        String    @unique // privacy-policy, terms-conditions, about-us
+  title       String
+  content     String    // HTML or rich text
+  published   Boolean   @default(true)
+  metaTitle   String?
+  metaDescription String?
+  updatedAt   DateTime  @updatedAt
+
+  @@map("website_pages")
+}
+
+model SocialLink {
+  id           String         @id @default(uuid())
+  platform     SocialPlatform
+  title        String
+  url          String
+  enabled      Boolean        @default(true)
+  displayOrder Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@map("social_links")
+}
+
+model HomepageContent {
+  id              String   @id @default("default-home")
+  heroTitle       String
+  heroSubtitle    String
+  ctaLabel        String   @default("استكشف العقارات")
+  ctaLink         String   @default("/properties")
+  heroBannerImage String
+  badgeText       String   @default("إشراقة المستقبل نحو غدٍ مشرق")
+  updatedAt       DateTime @updatedAt
+
+  @@map("homepage_content")
+}
+
+model ContactSetting {
+  id             String   @id @default("default-contact")
+  companyName    String   @default("شركة إشراقة المستقبل للعقارات")
+  contactPhone   String   @default("+966 11 000 0000")
+  secondaryPhone String?
+  email          String   @default("info@eshraqat-future.sa")
+  address        String   @default("الرياض، المملكة العربية السعودية")
+  workingHours   String   @default("السبت - الخميس: 9:00 ص - 9:00 م")
+  locationMapUrl String?
+  updatedAt      DateTime @updatedAt
+
+  @@map("contact_settings")
+}
+
+model SeoDefault {
+  id                     String   @id @default("default-seo")
+  websiteTitle           String   @default("إشراقة المستقبل للعقارات | نحو غدٍ مشرق")
+  defaultMetaDescription String
+  socialSharingImage     String
+  defaultKeywords        String
+  updatedAt              DateTime @updatedAt
+
+  @@map("seo_defaults")
+}
+
+// ==========================================
+// ADMINISTRATIVE AUDIT LOGS
+// ==========================================
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  actorId     String?
+  actorName   String
+  actorRole   String
+  action      String
+  targetType  String    // property, appointment, client, role, cms, etc.
+  targetId    String?
+  targetTitle String
+  details     String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  actor       User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
