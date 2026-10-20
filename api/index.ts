@@ -12,17 +12,67 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 let cachedServer: Express | null = null;
 
+const swaggerHtml = `<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <title>إشراقة المستقبل للعقارات | API Documentation</title>
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+  <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-32x32.png" />
+  <style>
+    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { margin: 0; background: #fafafa; }
+    .topbar { background-color: #032e2b !important; }
+    .swagger-ui .topbar .download-url-wrapper { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: "/api/docs-json",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout"
+      });
+    };
+  </script>
+</body>
+</html>`;
+
 async function bootstrapServer(): Promise<Express> {
   if (cachedServer) {
     return cachedServer;
   }
 
   const server: Express = express();
+
+  // Root redirect & custom Swagger UI handler for 100% serverless reliability
+  server.get(["/", "/api/docs", "/api/docs/"], (req, res, next) => {
+    if (req.path === "/" || req.path === "") {
+      return res.redirect("/api/docs");
+    }
+    if (req.path === "/api/docs" || req.path === "/api/docs/") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(swaggerHtml);
+    }
+    next();
+  });
+
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
 
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
+      contentSecurityPolicy: false,
     }),
   );
 
@@ -49,7 +99,7 @@ async function bootstrapServer(): Promise<Express> {
   app.useGlobalInterceptors(new TransformResponseInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger Documentation configuration with CDN assets for Serverless Vercel
+  // Swagger Documentation builder
   const swaggerConfig = new DocumentBuilder()
     .setTitle("إشراقة المستقبل للعقارات | Real Estate Backend API")
     .setDescription(
@@ -80,18 +130,7 @@ async function bootstrapServer(): Promise<Express> {
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup("api/docs", app, document, {
-    customSiteTitle: "إشراقة المستقبل للعقارات | API Docs",
-    customCssUrl: "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css",
-    customJs: [
-      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js",
-      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js",
-    ],
-    customCss: `
-      .topbar { background-color: #032e2b !important; }
-      .swagger-ui .topbar .download-url-wrapper { display: none !important; }
-    `,
-  });
+  SwaggerModule.setup("api/docs", app, document);
 
   await app.init();
   cachedServer = server;
