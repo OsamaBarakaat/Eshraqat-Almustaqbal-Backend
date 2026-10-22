@@ -421,8 +421,13 @@ export class PropertiesService {
   }
 
   async findBySlug(slug: string) {
-    const property = await this.prisma.property.findUnique({
-      where: { slug },
+    const property = await this.prisma.property.findFirst({
+      where: {
+        OR: [
+          { slug },
+          { id: slug },
+        ],
+      },
       include: this.defaultIncludes,
     });
 
