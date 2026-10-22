@@ -131,7 +131,30 @@ export class CmsService {
     return { success: true, message: "تم حذف رابط التواصل بنجاح" };
   }
 
-  // ================= HOMEPAGE CONTENT =================
+  // ================= HOMEPAGE CONTENT & VISION PILLARS =================
+  private readonly defaultPillars = [
+    {
+      icon: "Building2",
+      title: "معايير معمارية استثنائية",
+      description: "تصاميم عصرية مستوحاة من العمارة السلمانية الحديثة بأعلى معايير الإضاءة الطبيعية والواجهات الزجاجية العازلة للصوت والحرارة.",
+    },
+    {
+      icon: "ShieldCheck",
+      title: "صكوك إلكترونية وضمانات شاملة",
+      description: "صكوك ملكية إلكترونية فورية مرخصة، مع ضمانات تصل إلى 10 سنوات على الهيكل الإنشائي والعوازل وتركيبات السباكة والكهرباء.",
+    },
+    {
+      icon: "Cpu",
+      title: "تقنيات Smart Home ذكية",
+      description: "تكامل ذكي كامل للتحكم بالتكييف والإضاءة والمداخل والمسابح عبر تطبيقات الهواتف الذكية مع نظام توفير الطاقة الصديق للبيئة.",
+    },
+    {
+      icon: "Banknote",
+      title: "عوائد استثمارية متنامية",
+      description: "دراسات جدوى متخصصة للمواقع الواعدة تضمن للمستثمر عوائد إيجارية مجزية وارتفاعاً مستمراً في القيمة الرأسمالية للعقار.",
+    },
+  ];
+
   async getHomepageContent() {
     let content = await this.prisma.homepageContent.findUnique({
       where: { id: "default-home" },
@@ -147,8 +170,22 @@ export class CmsService {
           ctaLink: "/properties",
           heroBannerImage: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
           badgeText: "إشراقة المستقبل نحو غدٍ مشرق",
+          pillarsBadge: "ركائز التميز المؤسسي",
+          pillarsTitle: 'لماذا يختار النخبة "إشراقة المستقبل"؟',
+          pillarsSubtitle: "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.",
+          pillars: this.defaultPillars,
         },
       });
+    } else {
+      if (!content.pillars || !Array.isArray(content.pillars) || (content.pillars as any[]).length === 0) {
+        (content as any).pillars = this.defaultPillars;
+      }
+      if (!content.pillarsBadge) (content as any).pillarsBadge = "ركائز التميز المؤسسي";
+      if (!content.pillarsTitle) (content as any).pillarsTitle = 'لماذا يختار النخبة "إشراقة المستقبل"؟';
+      if (!content.pillarsSubtitle) {
+        (content as any).pillarsSubtitle =
+          "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.";
+      }
     }
 
     return content;
@@ -159,9 +196,22 @@ export class CmsService {
       where: { id: "default-home" },
       create: {
         id: "default-home",
+        heroTitle: dto.heroTitle,
+        heroSubtitle: dto.heroSubtitle,
+        ctaLabel: dto.ctaLabel ?? "استكشف العقارات",
+        ctaLink: dto.ctaLink ?? "/properties",
+        heroBannerImage: dto.heroBannerImage,
+        badgeText: dto.badgeText ?? "إشراقة المستقبل نحو غدٍ مشرق",
+        pillarsBadge: dto.pillarsBadge ?? "ركائز التميز المؤسسي",
+        pillarsTitle: dto.pillarsTitle ?? 'لماذا يختار النخبة "إشراقة المستقبل"؟',
+        pillarsSubtitle:
+          dto.pillarsSubtitle ??
+          "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.",
+        pillars: dto.pillars ?? this.defaultPillars,
+      },
+      update: {
         ...dto,
       },
-      update: dto,
     });
   }
 

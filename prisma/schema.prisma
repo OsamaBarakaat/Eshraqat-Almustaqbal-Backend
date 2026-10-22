@@ -509,6 +509,10 @@ model HomepageContent {
   ctaLink         String   @default("/properties")
   heroBannerImage String
   badgeText       String   @default("إشراقة المستقبل نحو غدٍ مشرق")
+  pillarsBadge    String?  @default("ركائز التميز المؤسسي")
+  pillarsTitle    String?  @default("لماذا يختار النخبة \"إشراقة المستقبل\"؟")
+  pillarsSubtitle String?  @default("نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.")
+  pillars         Json?
   updatedAt       DateTime @updatedAt
 
   @@map("homepage_content")

@@ -153,6 +153,25 @@ export class UpdateHomepageContentDto {
   @IsString()
   @IsOptional()
   badgeText?: string;
+
+  @ApiPropertyOptional({ default: "ركائز التميز المؤسسي" })
+  @IsString()
+  @IsOptional()
+  pillarsBadge?: string;
+
+  @ApiPropertyOptional({ default: "لماذا يختار النخبة \"إشراقة المستقبل\"؟" })
+  @IsString()
+  @IsOptional()
+  pillarsTitle?: string;
+
+  @ApiPropertyOptional({ default: "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح." })
+  @IsString()
+  @IsOptional()
+  pillarsSubtitle?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  pillars?: any;
 }
 
 // ================= CONTACT SETTINGS =================
