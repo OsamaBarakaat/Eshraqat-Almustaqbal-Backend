@@ -205,9 +205,10 @@ export class CmsService {
       ctaLabel: dto.ctaLabel ?? existing?.ctaLabel ?? "استكشف أحدث العقارات",
       ctaLink: dto.ctaLink ?? existing?.ctaLink ?? "/properties",
       heroBannerImage:
-        dto.heroBannerImage ??
-        existing?.heroBannerImage ??
-        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80",
+        dto.heroBannerImage && dto.heroBannerImage.trim() !== ""
+          ? dto.heroBannerImage.trim()
+          : existing?.heroBannerImage ||
+            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80",
       badgeText: dto.badgeText ?? existing?.badgeText ?? "وجهتك الاستثمارية الموثوقة بالمملكة",
       pillarsBadge: dto.pillarsBadge ?? existing?.pillarsBadge ?? "ركائز التميز المؤسسي",
       pillarsTitle: dto.pillarsTitle ?? existing?.pillarsTitle ?? 'لماذا يختار النخبة "إشراقة المستقبل"؟',
