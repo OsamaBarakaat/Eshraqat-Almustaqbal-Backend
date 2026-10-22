@@ -75,32 +75,52 @@ export class PropertiesService {
     const tokens = new Set<string>();
     tokens.add(raw);
 
-    // Swap ة / ه
-    if (raw.endsWith("ه")) {
-      tokens.add(raw.slice(0, -1) + "ة");
-    } else if (raw.endsWith("ة")) {
-      tokens.add(raw.slice(0, -1) + "ه");
-    }
-
-    // Strip "مدينة " or "حي " if user entered it
-    const stripped = raw.replace(/^(مدينة|مدينه|حي|محافظة|محافظه)\s+/, "");
-    if (stripped !== raw) {
-      tokens.add(stripped);
-      if (stripped.endsWith("ه")) tokens.add(stripped.slice(0, -1) + "ة");
-      if (stripped.endsWith("ة")) tokens.add(stripped.slice(0, -1) + "ه");
-    } else {
-      // Add with "مدينة " and "حي "
-      tokens.add(`مدينة ${raw}`);
-      tokens.add(`حي ${raw}`);
-      if (raw.endsWith("ه")) {
-        tokens.add(`مدينة ${raw.slice(0, -1)}ة`);
-        tokens.add(`حي ${raw.slice(0, -1)}ة`);
+    // Expand Alef variations: replace ا with [أ, إ, آ, ا] and vice versa
+    const alefForms = (str: string): string[] => {
+      const variants = [str];
+      if (/[أإآٱ]/.test(str)) {
+        variants.push(str.replace(/[أإآٱ]/g, "ا"));
       }
+      if (/ا/.test(str)) {
+        variants.push(str.replace(/ا/g, "أ"));
+        variants.push(str.replace(/ا/g, "إ"));
+        variants.push(str.replace(/ا/g, "آ"));
+      }
+      return variants;
+    };
+
+    // Strip "مدينة " or "حي " or "ال" prefix
+    const baseList: string[] = [raw];
+    const strippedPrefix = raw.replace(/^(مدينة|مدينه|حي|محافظة|محافظه)\s+/, "");
+    if (strippedPrefix !== raw) {
+      baseList.push(strippedPrefix);
+    } else {
+      baseList.push(`مدينة ${raw}`);
+      baseList.push(`حي ${raw}`);
     }
 
-    // Handle Alef variations
-    const norm = this.normalizeArabic(raw);
-    if (norm) tokens.add(norm);
+    // Strip "ال"
+    if (raw.startsWith("ال") && raw.length > 3) {
+      baseList.push(raw.slice(2));
+    }
+
+    baseList.forEach((b) => {
+      tokens.add(b);
+
+      // Swap ة / ه
+      if (b.endsWith("ه")) {
+        tokens.add(b.slice(0, -1) + "ة");
+      } else if (b.endsWith("ة")) {
+        tokens.add(b.slice(0, -1) + "ه");
+      }
+
+      // Alef variations
+      alefForms(b).forEach((af) => {
+        tokens.add(af);
+        if (af.endsWith("ه")) tokens.add(af.slice(0, -1) + "ة");
+        if (af.endsWith("ة")) tokens.add(af.slice(0, -1) + "ه");
+      });
+    });
 
     return Array.from(tokens).filter((t) => t.length > 0);
   }
