@@ -117,7 +117,30 @@ export class InquiriesService {
     return this.mapInquiryResponse(inquiry);
   }
 
+  async findClientInquiries(email?: string, phone?: string) {
+    if (!email && !phone) return [];
+
+    const where: Prisma.InquiryWhereInput = {
+      OR: [
+        ...(email ? [{ senderEmail: { equals: email.trim().toLowerCase(), mode: "insensitive" as const } }] : []),
+        ...(phone ? [{ senderPhone: { equals: phone.trim() } }] : []),
+      ],
+    };
+
+    const raw = await this.prisma.inquiry.findMany({
+      where,
+      include: this.inquiryIncludes,
+      orderBy: { submittedAt: "asc" },
+    });
+
+    return raw.map((inq) => this.mapInquiryResponse(inq));
+  }
+
   async create(dto: CreateInquiryDto) {
+    const name = (dto.senderName || dto.customerName || "زائر الموقع").trim();
+    const phone = (dto.senderPhone || dto.customerPhone || "لم يحدد بعد").trim();
+    const email = (dto.senderEmail || dto.customerEmail || "").trim().toLowerCase() || undefined;
+
     // If related to a property, check property exists and increment property inquiriesCount
     if (dto.relatedPropertyId) {
       const property = await this.prisma.property.findUnique({
@@ -133,12 +156,12 @@ export class InquiriesService {
 
     const created = await this.prisma.inquiry.create({
       data: {
-        senderName: dto.senderName,
-        senderPhone: dto.senderPhone,
-        senderEmail: dto.senderEmail,
+        senderName: name,
+        senderPhone: phone,
+        senderEmail: email,
         type: dto.type,
         relatedPropertyId: dto.relatedPropertyId,
-        subject: dto.subject,
+        subject: dto.subject || "استفسار من الموقع",
         message: dto.message,
       },
       include: this.inquiryIncludes,
@@ -149,8 +172,8 @@ export class InquiriesService {
       const existingClient = await this.prisma.client.findFirst({
         where: {
           OR: [
-            ...(dto.senderEmail ? [{ email: { equals: dto.senderEmail.trim().toLowerCase(), mode: "insensitive" as const } }] : []),
-            { phone: { equals: dto.senderPhone.trim() } },
+            ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
+            { phone: { equals: phone } },
           ],
         },
       });
@@ -164,7 +187,7 @@ export class InquiriesService {
             timeline: {
               create: {
                 type: TimelineEventType.INQUIRY,
-                title: `استفسار جديد: ${dto.subject}`,
+                title: `استفسار جديد: ${dto.subject || "استفسار"}`,
                 description: dto.message,
                 authorName: "نظام الموقع الإلكتروني",
               },
@@ -174,9 +197,9 @@ export class InquiriesService {
       } else {
         await this.prisma.client.create({
           data: {
-            name: dto.senderName.trim(),
-            phone: dto.senderPhone.trim(),
-            email: dto.senderEmail ? dto.senderEmail.trim().toLowerCase() : undefined,
+            name,
+            phone,
+            email,
             status: LeadStatus.NEW,
             source: LeadSource.WEBSITE_INQUIRY,
             interestedPropertyId: dto.relatedPropertyId || undefined,
@@ -184,7 +207,7 @@ export class InquiriesService {
             timeline: {
               create: {
                 type: TimelineEventType.INQUIRY,
-                title: `عميل جديد عبر استفسار: ${dto.subject}`,
+                title: `عميل جديد عبر استفسار: ${dto.subject || "استفسار"}`,
                 description: dto.message,
                 authorName: "نظام الموقع الإلكتروني",
               },

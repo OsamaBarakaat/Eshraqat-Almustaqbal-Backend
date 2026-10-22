@@ -4,20 +4,35 @@ import { InquiryStatus, InquiryType } from "@prisma/client";
 import { PaginationQueryDto } from "../../../common/dto/pagination-query.dto";
 
 export class CreateInquiryDto {
-  @ApiProperty({ example: "خالد المحمدي" })
+  @ApiPropertyOptional({ example: "خالد المحمدي" })
   @IsString()
-  @IsNotEmpty()
-  senderName: string;
+  @IsOptional()
+  senderName?: string;
 
-  @ApiProperty({ example: "+966540001122" })
+  @ApiPropertyOptional({ example: "خالد المحمدي" })
   @IsString()
-  @IsNotEmpty()
-  senderPhone: string;
+  @IsOptional()
+  customerName?: string;
+
+  @ApiPropertyOptional({ example: "+966540001122" })
+  @IsString()
+  @IsOptional()
+  senderPhone?: string;
+
+  @ApiPropertyOptional({ example: "+966540001122" })
+  @IsString()
+  @IsOptional()
+  customerPhone?: string;
 
   @ApiPropertyOptional({ example: "khaled@example.com" })
-  @IsEmail()
   @IsOptional()
+  @IsString()
   senderEmail?: string;
+
+  @ApiPropertyOptional({ example: "khaled@example.com" })
+  @IsOptional()
+  @IsString()
+  customerEmail?: string;
 
   @ApiPropertyOptional({ enum: InquiryType, default: InquiryType.GENERAL_CONTACT })
   @IsEnum(InquiryType)

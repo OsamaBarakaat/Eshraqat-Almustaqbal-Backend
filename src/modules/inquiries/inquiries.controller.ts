@@ -19,12 +19,22 @@ import { ModuleType, ActionType } from "@prisma/client";
 export class InquiriesController {
   constructor(private readonly inquiriesService: InquiriesService) {}
 
-  // ================= PUBLIC WEBSITE ENDPOINT =================
+  // ================= PUBLIC WEBSITE ENDPOINTS =================
   @Public()
   @Post("submit")
   @ApiOperation({ summary: "Submit a new contact or property inquiry from the website" })
   submitFromWebsite(@Body() dto: CreateInquiryDto) {
     return this.inquiriesService.create(dto);
+  }
+
+  @Public()
+  @Get("client")
+  @ApiOperation({ summary: "Get customer inquiries and admin replies for chat and messaging" })
+  findClientInquiries(
+    @Query("email") email?: string,
+    @Query("phone") phone?: string,
+  ) {
+    return this.inquiriesService.findClientInquiries(email, phone);
   }
 
   // ================= ADMIN DASHBOARD ENDPOINTS =================
