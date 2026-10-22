@@ -6,7 +6,7 @@ import {
   AssignEmployeeDto,
   QueryAppointmentsDto,
 } from "./dto/appointments.dto";
-import { Prisma } from "@prisma/client";
+import { Prisma, LeadStatus, LeadSource, TimelineEventType } from "@prisma/client";
 
 @Injectable()
 export class AppointmentsService {
@@ -150,6 +150,58 @@ export class AppointmentsService {
       },
       include: this.appointmentIncludes,
     });
+
+    // Auto-sync or create CRM lead
+    try {
+      const existingClient = await this.prisma.client.findFirst({
+        where: {
+          OR: [
+            ...(dto.customerEmail ? [{ email: { equals: dto.customerEmail.trim().toLowerCase(), mode: "insensitive" as const } }] : []),
+            { phone: { equals: dto.customerPhone.trim() } },
+          ],
+        },
+      });
+
+      if (existingClient) {
+        await this.prisma.client.update({
+          where: { id: existingClient.id },
+          data: {
+            interestedPropertyId: dto.propertyId,
+            lastActivityAt: new Date(),
+            timeline: {
+              create: {
+                type: TimelineEventType.MEETING,
+                title: "حجز موعد معاينة ميدانية",
+                description: `طلب موعد معاينة لعقار (${property.code} - ${property.title}) بتاريخ ${dto.requestedDate} الساعة ${dto.requestedTime}`,
+                authorName: "نظام الموقع الإلكتروني",
+              },
+            },
+          },
+        });
+      } else {
+        await this.prisma.client.create({
+          data: {
+            name: dto.customerName.trim(),
+            phone: dto.customerPhone.trim(),
+            email: dto.customerEmail ? dto.customerEmail.trim().toLowerCase() : undefined,
+            status: LeadStatus.NEW,
+            source: LeadSource.WEBSITE_INQUIRY,
+            interestedPropertyId: dto.propertyId,
+            notes: `حجز موعد معاينة لعقار (${property.code} - ${property.title})`,
+            timeline: {
+              create: {
+                type: TimelineEventType.STATUS_CHANGE,
+                title: "عميل جديد عبر حجز موعد معاينة",
+                description: `طلب موعد معاينة لعقار (${property.code} - ${property.title}) بتاريخ ${dto.requestedDate}`,
+                authorName: "نظام الموقع الإلكتروني",
+              },
+            },
+          },
+        });
+      }
+    } catch (crmErr) {
+      console.warn("Failed to auto-create client from appointment:", crmErr);
+    }
 
     return this.mapAppointmentResponse(created);
   }

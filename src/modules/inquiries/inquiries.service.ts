@@ -7,7 +7,7 @@ import {
   AssignInquiryEmployeeDto,
   QueryInquiriesDto,
 } from "./dto/inquiries.dto";
-import { Prisma, InquiryStatus } from "@prisma/client";
+import { Prisma, InquiryStatus, LeadStatus, LeadSource, TimelineEventType } from "@prisma/client";
 
 @Injectable()
 export class InquiriesService {
@@ -143,6 +143,58 @@ export class InquiriesService {
       },
       include: this.inquiryIncludes,
     });
+
+    // Auto-sync or create CRM lead
+    try {
+      const existingClient = await this.prisma.client.findFirst({
+        where: {
+          OR: [
+            ...(dto.senderEmail ? [{ email: { equals: dto.senderEmail.trim().toLowerCase(), mode: "insensitive" as const } }] : []),
+            { phone: { equals: dto.senderPhone.trim() } },
+          ],
+        },
+      });
+
+      if (existingClient) {
+        await this.prisma.client.update({
+          where: { id: existingClient.id },
+          data: {
+            ...(dto.relatedPropertyId && { interestedPropertyId: dto.relatedPropertyId }),
+            lastActivityAt: new Date(),
+            timeline: {
+              create: {
+                type: TimelineEventType.INQUIRY,
+                title: `استفسار جديد: ${dto.subject}`,
+                description: dto.message,
+                authorName: "نظام الموقع الإلكتروني",
+              },
+            },
+          },
+        });
+      } else {
+        await this.prisma.client.create({
+          data: {
+            name: dto.senderName.trim(),
+            phone: dto.senderPhone.trim(),
+            email: dto.senderEmail ? dto.senderEmail.trim().toLowerCase() : undefined,
+            status: LeadStatus.NEW,
+            source: LeadSource.WEBSITE_INQUIRY,
+            interestedPropertyId: dto.relatedPropertyId || undefined,
+            notes: `استفسار: ${dto.subject} - ${dto.message.slice(0, 100)}`,
+            timeline: {
+              create: {
+                type: TimelineEventType.INQUIRY,
+                title: `عميل جديد عبر استفسار: ${dto.subject}`,
+                description: dto.message,
+                authorName: "نظام الموقع الإلكتروني",
+              },
+            },
+          },
+        });
+      }
+    } catch (crmErr) {
+      console.warn("Failed to auto-create client from inquiry:", crmErr);
+    }
 
     return this.mapInquiryResponse(created);
   }

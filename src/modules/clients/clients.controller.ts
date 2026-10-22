@@ -8,10 +8,12 @@ import {
   AddTimelineEventDto,
   AssignClientEmployeeDto,
   QueryClientsDto,
+  SyncClientWebsiteDto,
 } from "./dto/clients.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../common/guards/permissions.guard";
 import { RequirePermissions } from "../../common/decorators/require-permissions.decorator";
+import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ModuleType, ActionType } from "@prisma/client";
 import type { User } from "@prisma/client";
@@ -22,6 +24,21 @@ import type { User } from "@prisma/client";
 @Controller("clients")
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
+
+  // ================= PUBLIC WEBSITE SYNC ENDPOINT =================
+  @Public()
+  @Post("public/sync")
+  @ApiOperation({ summary: "Sync or register a website client into CRM on login" })
+  syncFromWebsite(@Body() dto: SyncClientWebsiteDto) {
+    return this.clientsService.syncFromWebsite(dto);
+  }
+
+  @Public()
+  @Post("sync")
+  @ApiOperation({ summary: "Sync or register a website client into CRM on login (alias)" })
+  syncFromWebsiteAlias(@Body() dto: SyncClientWebsiteDto) {
+    return this.clientsService.syncFromWebsite(dto);
+  }
 
   @RequirePermissions({ module: ModuleType.clients, actions: [ActionType.view] })
   @Get()

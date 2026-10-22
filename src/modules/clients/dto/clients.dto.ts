@@ -124,3 +124,34 @@ export class QueryClientsDto extends PaginationQueryDto {
   @IsOptional()
   assignedEmployeeId?: string;
 }
+
+export class SyncClientWebsiteDto {
+  @ApiProperty({ example: "client@example.com" })
+  @IsEmail({}, { message: "يرجى إدخال بريد إلكتروني صحيح" })
+  email: string;
+
+  @ApiPropertyOptional({ example: "عبدالله العتيبي" })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ example: "+966 50 123 4567" })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: "prop-uuid-123" })
+  @IsOptional()
+  @IsString()
+  interestedPropertyId?: string;
+
+  @ApiPropertyOptional({ enum: LeadSource })
+  @IsOptional()
+  @IsEnum(LeadSource)
+  source?: LeadSource;
+
+  @ApiPropertyOptional({ example: "تسجيل دخول وتوثيق البريد الإلكتروني" })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

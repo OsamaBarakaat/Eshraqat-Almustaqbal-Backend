@@ -7,8 +7,9 @@ import {
   AddTimelineEventDto,
   AssignClientEmployeeDto,
   QueryClientsDto,
+  SyncClientWebsiteDto,
 } from "./dto/clients.dto";
-import { Prisma, TimelineEventType } from "@prisma/client";
+import { Prisma, TimelineEventType, LeadStatus, LeadSource } from "@prisma/client";
 
 @Injectable()
 export class ClientsService {
@@ -124,6 +125,72 @@ export class ClientsService {
 
     if (!client) throw new NotFoundException("العميل غير موجود");
     return this.mapClientResponse(client);
+  }
+
+  async syncFromWebsite(dto: SyncClientWebsiteDto) {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    // Check if client exists by email or phone
+    const existing = await this.prisma.client.findFirst({
+      where: {
+        OR: [
+          { email: { equals: normalizedEmail, mode: "insensitive" } },
+          ...(dto.phone ? [{ phone: { equals: dto.phone.trim() } }] : []),
+        ],
+      },
+      include: this.clientIncludes,
+    });
+
+    if (existing) {
+      const updated = await this.prisma.client.update({
+        where: { id: existing.id },
+        data: {
+          ...(dto.name && { name: dto.name }),
+          ...(dto.phone && (!existing.phone || existing.phone === "لم يحدد بعد") && { phone: dto.phone }),
+          ...(dto.interestedPropertyId && { interestedPropertyId: dto.interestedPropertyId }),
+          lastActivityAt: new Date(),
+          timeline: {
+            create: {
+              type: TimelineEventType.NOTE,
+              title: "تسجيل دخول من الموقع",
+              description: dto.notes || "قام العميل بتسجيل الدخول إلى حسابه في الموقع الإلكتروني",
+              authorName: "نظام الموقع الإلكتروني",
+            },
+          },
+        },
+        include: this.clientIncludes,
+      });
+
+      return this.mapClientResponse(updated);
+    }
+
+    // Create brand new client from website authentication
+    const fallbackName = dto.name?.trim() || normalizedEmail.split("@")[0];
+    const fallbackPhone = dto.phone?.trim() || "لم يحدد بعد";
+
+    const created = await this.prisma.client.create({
+      data: {
+        name: fallbackName,
+        email: normalizedEmail,
+        phone: fallbackPhone,
+        status: LeadStatus.NEW,
+        source: dto.source || LeadSource.WEBSITE_INQUIRY,
+        interestedPropertyId: dto.interestedPropertyId || undefined,
+        notes: dto.notes || "عميل مسجل عبر توثيق البريد الإلكتروني (OTP) في الموقع الرسمي",
+        lastActivityAt: new Date(),
+        timeline: {
+          create: {
+            type: TimelineEventType.STATUS_CHANGE,
+            title: "تسجيل عميل جديد من الموقع",
+            description: "تم توثيق الحساب وتسجيل الدخول بنجاح عبر رمز التحقق OTP",
+            authorName: "نظام الموقع الإلكتروني",
+          },
+        },
+      },
+      include: this.clientIncludes,
+    });
+
+    return this.mapClientResponse(created);
   }
 
   async create(dto: CreateClientDto, authorName = "النظام") {
