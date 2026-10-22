@@ -18,12 +18,32 @@ import { ModuleType, ActionType } from "@prisma/client";
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
 
-  // ================= PUBLIC WEBSITE BOOKING =================
+  // ================= PUBLIC WEBSITE BOOKING & TRACKING =================
   @Public()
   @Post("book")
   @ApiOperation({ summary: "Book a property viewing appointment from the public website" })
   bookFromWebsite(@Body() dto: CreateAppointmentDto) {
     return this.appointmentsService.create(dto);
+  }
+
+  @Public()
+  @Get("client")
+  @ApiOperation({ summary: "Get viewing appointments for client by email or phone" })
+  findClientBookings(
+    @Query("email") email?: string,
+    @Query("phone") phone?: string,
+  ) {
+    return this.appointmentsService.findClientBookings(email, phone);
+  }
+
+  @Public()
+  @Patch("client/:id/cancel")
+  @ApiOperation({ summary: "Cancel viewing appointment by client" })
+  cancelClientBooking(
+    @Param("id") id: string,
+    @Body("email") email?: string,
+  ) {
+    return this.appointmentsService.cancelClientBooking(id, email);
   }
 
   // ================= ADMIN DASHBOARD ENDPOINTS =================

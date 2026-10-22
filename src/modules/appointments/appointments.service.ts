@@ -20,6 +20,13 @@ export class AppointmentsService {
         title: true,
         city: true,
         areaName: true,
+        price: true,
+        images: {
+          select: {
+            url: true,
+          },
+          take: 1,
+        },
       },
     },
     assignedEmployee: {
@@ -42,6 +49,8 @@ export class AppointmentsService {
       propertyCode: a.property?.code || "",
       propertyTitle: a.property?.title || "",
       propertyLocation: a.property ? `${a.property.city} - ${a.property.areaName}` : "",
+      propertyPrice: a.property?.price ? Number(a.property.price) : null,
+      propertyImage: a.property?.images?.[0]?.url || "",
       requestedDate: a.requestedDate instanceof Date ? a.requestedDate.toISOString().split("T")[0] : a.requestedDate,
       requestedTime: a.requestedTime,
       status: a.status,
@@ -187,5 +196,53 @@ export class AppointmentsService {
 
     await this.prisma.appointment.delete({ where: { id } });
     return { success: true, message: "تم حذف موعد المعاينة بنجاح" };
+  }
+
+  async findClientBookings(email?: string, phone?: string) {
+    if (!email && !phone) return [];
+
+    const conditions: Prisma.AppointmentWhereInput[] = [];
+    if (email && email.trim()) {
+      conditions.push({
+        customerEmail: { equals: email.trim(), mode: Prisma.QueryMode.insensitive },
+      });
+    }
+    if (phone && phone.trim()) {
+      conditions.push({
+        customerPhone: { contains: phone.trim() },
+      });
+    }
+
+    if (conditions.length === 0) return [];
+
+    const items = await this.prisma.appointment.findMany({
+      where: {
+        OR: conditions,
+      },
+      orderBy: { createdAt: "desc" },
+      include: this.appointmentIncludes,
+    });
+
+    return items.map((a) => this.mapAppointmentResponse(a));
+  }
+
+  async cancelClientBooking(id: string, email?: string) {
+    const existing = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("موعد المعاينة غير موجود");
+
+    if (email && existing.customerEmail && existing.customerEmail.toLowerCase() !== email.toLowerCase()) {
+      throw new BadRequestException("غير مصرح لك بإلغاء هذا الموعد");
+    }
+
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: "CANCELLED",
+        cancellationReason: "تم الإلغاء بواسطة العميل من الموقع",
+      },
+      include: this.appointmentIncludes,
+    });
+
+    return this.mapAppointmentResponse(updated);
   }
 }
