@@ -192,25 +192,40 @@ export class CmsService {
   }
 
   async updateHomepageContent(dto: UpdateHomepageContentDto) {
+    const existing = await this.prisma.homepageContent.findUnique({
+      where: { id: "default-home" },
+    });
+
+    const dataToSave = {
+      heroTitle: dto.heroTitle ?? existing?.heroTitle ?? "إشراقة المستقبل نحو غدٍ مشرق",
+      heroSubtitle:
+        dto.heroSubtitle ??
+        existing?.heroSubtitle ??
+        "بوابتك العقارية الأولى في المملكة العربية السعودية لاكتشاف أرقى الفيلات، الشقق الفاخرة، والفرص الاستثمارية الكبرى.",
+      ctaLabel: dto.ctaLabel ?? existing?.ctaLabel ?? "استكشف أحدث العقارات",
+      ctaLink: dto.ctaLink ?? existing?.ctaLink ?? "/properties",
+      heroBannerImage:
+        dto.heroBannerImage ??
+        existing?.heroBannerImage ??
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80",
+      badgeText: dto.badgeText ?? existing?.badgeText ?? "وجهتك الاستثمارية الموثوقة بالمملكة",
+      pillarsBadge: dto.pillarsBadge ?? existing?.pillarsBadge ?? "ركائز التميز المؤسسي",
+      pillarsTitle: dto.pillarsTitle ?? existing?.pillarsTitle ?? 'لماذا يختار النخبة "إشراقة المستقبل"؟',
+      pillarsSubtitle:
+        dto.pillarsSubtitle ??
+        existing?.pillarsSubtitle ??
+        "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.",
+      pillars: dto.pillars ?? existing?.pillars ?? this.defaultPillars,
+    };
+
     return this.prisma.homepageContent.upsert({
       where: { id: "default-home" },
       create: {
         id: "default-home",
-        heroTitle: dto.heroTitle,
-        heroSubtitle: dto.heroSubtitle,
-        ctaLabel: dto.ctaLabel ?? "استكشف العقارات",
-        ctaLink: dto.ctaLink ?? "/properties",
-        heroBannerImage: dto.heroBannerImage,
-        badgeText: dto.badgeText ?? "إشراقة المستقبل نحو غدٍ مشرق",
-        pillarsBadge: dto.pillarsBadge ?? "ركائز التميز المؤسسي",
-        pillarsTitle: dto.pillarsTitle ?? 'لماذا يختار النخبة "إشراقة المستقبل"؟',
-        pillarsSubtitle:
-          dto.pillarsSubtitle ??
-          "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.",
-        pillars: dto.pillars ?? this.defaultPillars,
+        ...dataToSave,
       },
       update: {
-        ...dto,
+        ...dataToSave,
       },
     });
   }

@@ -124,15 +124,15 @@ export class UpdateSocialLinkDto extends CreateSocialLinkDto {}
 
 // ================= HOMEPAGE CONTENT =================
 export class UpdateHomepageContentDto {
-  @ApiProperty({ example: "نحو غدٍ مشرق.. عقارك الأفضل في انتظارك" })
+  @ApiPropertyOptional({ example: "نحو غدٍ مشرق.. عقارك الأفضل في انتظارك" })
   @IsString()
-  @IsNotEmpty()
-  heroTitle: string;
+  @IsOptional()
+  heroTitle?: string;
 
-  @ApiProperty({ example: "نخبة من أرقى العقارات والفلل السكنية والتجارية في المملكة العربية السعودية" })
+  @ApiPropertyOptional({ example: "نخبة من أرقى العقارات والفلل السكنية والتجارية في المملكة العربية السعودية" })
   @IsString()
-  @IsNotEmpty()
-  heroSubtitle: string;
+  @IsOptional()
+  heroSubtitle?: string;
 
   @ApiPropertyOptional({ default: "استكشف العقارات" })
   @IsString()
@@ -144,10 +144,10 @@ export class UpdateHomepageContentDto {
   @IsOptional()
   ctaLink?: string;
 
-  @ApiProperty({ example: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c" })
+  @ApiPropertyOptional({ example: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c" })
   @IsString()
-  @IsNotEmpty()
-  heroBannerImage: string;
+  @IsOptional()
+  heroBannerImage?: string;
 
   @ApiPropertyOptional({ default: "إشراقة المستقبل نحو غدٍ مشرق" })
   @IsString()
