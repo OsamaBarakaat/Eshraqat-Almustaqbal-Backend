@@ -43,6 +43,68 @@ export class PropertiesService {
       .replace(/\-\-+/g, "-");
   }
 
+  /**
+   * Normalize Arabic text for robust search (unifying alef, taa marbuta/haa, yaa/alef maqsura, tashkeel)
+   */
+  private normalizeArabic(text: string): string {
+    if (!text) return "";
+    return text
+      .trim()
+      .toLowerCase()
+      // Remove tashkeel (diacritics)
+      .replace(/[\u064B-\u0652]/g, "")
+      // Normalize Alef forms (أ, إ, آ, ٱ -> ا)
+      .replace(/[أإآٱ]/g, "ا")
+      // Normalize Taa Marbuta & Haa (ة -> ه)
+      .replace(/ة/g, "ه")
+      // Normalize Yaa & Alef Maqsura (ى -> ي)
+      .replace(/ى/g, "ي")
+      // Strip common repetitive words that users omit/add
+      .replace(/\b(مدينه|مدينة|حي|محافظه|محافظة|منطقه|منطقة)\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  /**
+   * Generates search token variations for a given Arabic query (e.g. "جده" -> ["جده", "جدة", "مدينة جدة"])
+   */
+  private generateArabicTokens(term: string): string[] {
+    const raw = term.trim();
+    if (!raw) return [];
+
+    const tokens = new Set<string>();
+    tokens.add(raw);
+
+    // Swap ة / ه
+    if (raw.endsWith("ه")) {
+      tokens.add(raw.slice(0, -1) + "ة");
+    } else if (raw.endsWith("ة")) {
+      tokens.add(raw.slice(0, -1) + "ه");
+    }
+
+    // Strip "مدينة " or "حي " if user entered it
+    const stripped = raw.replace(/^(مدينة|مدينه|حي|محافظة|محافظه)\s+/, "");
+    if (stripped !== raw) {
+      tokens.add(stripped);
+      if (stripped.endsWith("ه")) tokens.add(stripped.slice(0, -1) + "ة");
+      if (stripped.endsWith("ة")) tokens.add(stripped.slice(0, -1) + "ه");
+    } else {
+      // Add with "مدينة " and "حي "
+      tokens.add(`مدينة ${raw}`);
+      tokens.add(`حي ${raw}`);
+      if (raw.endsWith("ه")) {
+        tokens.add(`مدينة ${raw.slice(0, -1)}ة`);
+        tokens.add(`حي ${raw.slice(0, -1)}ة`);
+      }
+    }
+
+    // Handle Alef variations
+    const norm = this.normalizeArabic(raw);
+    if (norm) tokens.add(norm);
+
+    return Array.from(tokens).filter((t) => t.length > 0);
+  }
+
   private async generateUniqueCode(): Promise<string> {
     const lastProperty = await this.prisma.property.findFirst({
       orderBy: { createdAt: "desc" },
@@ -116,23 +178,78 @@ export class PropertiesService {
 
     const skip = (page - 1) * limit;
     const where: Prisma.PropertyWhereInput = {};
+    const andConditions: Prisma.PropertyWhereInput[] = [];
 
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { code: { contains: search, mode: "insensitive" } },
-        { city: { contains: search, mode: "insensitive" } },
-        { areaName: { contains: search, mode: "insensitive" } },
-      ];
+    // 1. Smart Arabic-aware search query
+    if (search && search.trim()) {
+      const tokens = this.generateArabicTokens(search);
+      const orClauses: Prisma.PropertyWhereInput[] = [];
+
+      tokens.forEach((tk) => {
+        orClauses.push({ title: { contains: tk, mode: "insensitive" } });
+        orClauses.push({ code: { contains: tk, mode: "insensitive" } });
+        orClauses.push({ city: { contains: tk, mode: "insensitive" } });
+        orClauses.push({ areaName: { contains: tk, mode: "insensitive" } });
+        orClauses.push({ streetAddress: { contains: tk, mode: "insensitive" } });
+      });
+
+      andConditions.push({ OR: orClauses });
     }
 
     if (category) where.category = category;
     if (purpose) where.purpose = purpose;
     if (status) where.status = status;
     if (featured !== undefined) where.featured = String(featured) === "true";
+
+    // 2. Hybrid location filtering (matching cityId OR textual city name)
+    if (cityId) {
+      let targetCityName = "";
+      try {
+        const cityObj = await this.prisma.city.findUnique({ where: { id: cityId } });
+        if (cityObj?.nameArabic) targetCityName = cityObj.nameArabic;
+      } catch {
+        // ignore
+      }
+
+      if (targetCityName) {
+        const cityTokens = this.generateArabicTokens(targetCityName);
+        const cityOrClauses: Prisma.PropertyWhereInput[] = [{ cityId }];
+        cityTokens.forEach((tk) => {
+          cityOrClauses.push({ city: { contains: tk, mode: "insensitive" } });
+        });
+        andConditions.push({ OR: cityOrClauses });
+      } else {
+        where.cityId = cityId;
+      }
+    }
+
+    // 3. Hybrid district filtering (matching districtId OR textual areaName)
+    if (districtId) {
+      let targetDistName = "";
+      try {
+        const distObj = await this.prisma.district.findUnique({ where: { id: districtId } });
+        if (distObj?.nameArabic) targetDistName = distObj.nameArabic;
+      } catch {
+        // ignore
+      }
+
+      if (targetDistName) {
+        const distTokens = this.generateArabicTokens(targetDistName);
+        const distOrClauses: Prisma.PropertyWhereInput[] = [{ districtId }];
+        distTokens.forEach((tk) => {
+          distOrClauses.push({ areaName: { contains: tk, mode: "insensitive" } });
+        });
+        andConditions.push({ OR: distOrClauses });
+      } else {
+        where.districtId = districtId;
+      }
+    }
+
     if (provinceId) where.provinceId = provinceId;
-    if (cityId) where.cityId = cityId;
-    if (districtId) where.districtId = districtId;
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
 
     if (String(hasDiscount) === "true") {
       where.originalPrice = { not: null };
