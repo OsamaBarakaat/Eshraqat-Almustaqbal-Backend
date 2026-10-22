@@ -155,6 +155,33 @@ export class CmsService {
     },
   ];
 
+  private readonly defaultTestimonials = [
+    {
+      id: "testimonial-1",
+      name: "م. خالد السبيعي",
+      title: "مالك فيلا مودرن - حي حطين",
+      content:
+        "تجربة شراء استثنائية من كافة النواحي. الجودة الإنشائية للفيلا وتشطيبات الرخام والمسبح كانت مطابقة تماماً للمواصفات المعروضة، وفريق خدمة العملاء كان متواجداً معنا في كل خطوة حتى الإفراغ الإلكتروني.",
+      rating: 5,
+    },
+    {
+      id: "testimonial-2",
+      name: "عبد العزيز الراجحي",
+      title: "مستثمر في المجمعات التجارية",
+      content:
+        "استثمرت في مبنى تجاري من تطوير إشراقة المستقبل شمال الرياض، وحققت عائداً إيجارياً سنوياً تجاوز 9.5%. الدراسات الاستثمارية التي يقدمونها تتميز بدقة متناهية والتزام تام بمواعيد التسليم.",
+      rating: 5,
+    },
+    {
+      id: "testimonial-3",
+      name: "د. نورة الشمري",
+      title: "مالكة بنتهاوس - حي العقيق",
+      content:
+        "إطلالة الروف على أبراج كافد خيالية! النظام الذكي للتحكم بالمنزل والخصوصية في المصعد يعطي شعوراً حقيقياً بالفخامة الفندقية. فخورة بأن تكون هذه بداية مسكني الجديد في الرياض.",
+      rating: 5,
+    },
+  ];
+
   async getHomepageContent() {
     let content = await this.prisma.homepageContent.findUnique({
       where: { id: "default-home" },
@@ -174,6 +201,10 @@ export class CmsService {
           pillarsTitle: 'لماذا يختار النخبة "إشراقة المستقبل"؟',
           pillarsSubtitle: "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.",
           pillars: this.defaultPillars,
+          testimonialsBadge: "ثقة وشهادات عملائنا",
+          testimonialsTitle: "ماذا يقول عملاؤنا ومستثمرونا؟",
+          testimonialsSubtitle: "نفخر بأن نكون الخيار الأول للعائلات والمستثمرين في السوق العقاري السعودي.",
+          testimonials: this.defaultTestimonials,
         },
       });
     } else {
@@ -185,6 +216,15 @@ export class CmsService {
       if (!content.pillarsSubtitle) {
         (content as any).pillarsSubtitle =
           "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.";
+      }
+      if (!content.testimonials || !Array.isArray(content.testimonials) || (content.testimonials as any[]).length === 0) {
+        (content as any).testimonials = this.defaultTestimonials;
+      }
+      if (!content.testimonialsBadge) (content as any).testimonialsBadge = "ثقة وشهادات عملائنا";
+      if (!content.testimonialsTitle) (content as any).testimonialsTitle = "ماذا يقول عملاؤنا ومستثمرونا؟";
+      if (!content.testimonialsSubtitle) {
+        (content as any).testimonialsSubtitle =
+          "نفخر بأن نكون الخيار الأول للعائلات والمستثمرين في السوق العقاري السعودي.";
       }
     }
 
@@ -217,6 +257,13 @@ export class CmsService {
         existing?.pillarsSubtitle ??
         "نضع الشفافية والجودة الهندسية وراحة العميل في صدارة أولوياتنا منذ مرحلة المخططات الأولى وحتى تسليم المفتاح.",
       pillars: dto.pillars ?? existing?.pillars ?? this.defaultPillars,
+      testimonialsBadge: dto.testimonialsBadge ?? existing?.testimonialsBadge ?? "ثقة وشهادات عملائنا",
+      testimonialsTitle: dto.testimonialsTitle ?? existing?.testimonialsTitle ?? "ماذا يقول عملاؤنا ومستثمرونا؟",
+      testimonialsSubtitle:
+        dto.testimonialsSubtitle ??
+        existing?.testimonialsSubtitle ??
+        "نفخر بأن نكون الخيار الأول للعائلات والمستثمرين في السوق العقاري السعودي.",
+      testimonials: dto.testimonials ?? existing?.testimonials ?? this.defaultTestimonials,
     };
 
     return this.prisma.homepageContent.upsert({

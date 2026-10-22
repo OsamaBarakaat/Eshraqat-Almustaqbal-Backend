@@ -172,6 +172,25 @@ export class UpdateHomepageContentDto {
   @ApiPropertyOptional()
   @IsOptional()
   pillars?: any;
+
+  @ApiPropertyOptional({ default: "ثقة وشهادات عملائنا" })
+  @IsString()
+  @IsOptional()
+  testimonialsBadge?: string;
+
+  @ApiPropertyOptional({ default: "ماذا يقول عملاؤنا ومستثمرونا؟" })
+  @IsString()
+  @IsOptional()
+  testimonialsTitle?: string;
+
+  @ApiPropertyOptional({ default: "نفخر بأن نكون الخيار الأول للعائلات والمستثمرين في السوق العقاري السعودي." })
+  @IsString()
+  @IsOptional()
+  testimonialsSubtitle?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  testimonials?: any;
 }
 
 // ================= CONTACT SETTINGS =================
