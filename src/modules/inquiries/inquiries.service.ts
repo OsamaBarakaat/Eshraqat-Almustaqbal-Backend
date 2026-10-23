@@ -7,7 +7,7 @@ import {
   AssignInquiryEmployeeDto,
   QueryInquiriesDto,
 } from "./dto/inquiries.dto";
-import { Prisma, InquiryStatus, LeadStatus, LeadSource, TimelineEventType } from "@prisma/client";
+import { Prisma, InquiryStatus, InquiryType, LeadStatus, LeadSource, TimelineEventType } from "@prisma/client";
 
 @Injectable()
 export class InquiriesService {
@@ -141,6 +141,19 @@ export class InquiriesService {
     const phone = (dto.senderPhone || dto.customerPhone || "لم يحدد بعد").trim();
     const email = (dto.senderEmail || dto.customerEmail || "").trim().toLowerCase() || undefined;
 
+    // Resolve intelligent inquiry type if not provided or left as default
+    let inquiryType: InquiryType = dto.type || InquiryType.GENERAL_CONTACT;
+    const sub = (dto.subject || "").toLowerCase();
+    if (!dto.type || dto.type === InquiryType.GENERAL_CONTACT) {
+      if (dto.relatedPropertyId || sub.includes("عقار") || sub.includes("معاينة") || sub.includes("فيلا") || sub.includes("شقة")) {
+        inquiryType = InquiryType.PROPERTY_INQUIRY;
+      } else if (sub.includes("استثمار") || sub.includes("شراكة") || sub.includes("تسويق") || sub.includes("بيع") || sub.includes("إدارة")) {
+        inquiryType = InquiryType.PARTNERSHIP;
+      } else if (sub.includes("تمويل") || sub.includes("سعر") || sub.includes("حاسبة") || sub.includes("أسعار") || sub.includes("تكلفة")) {
+        inquiryType = InquiryType.PRICE_REQUEST;
+      }
+    }
+
     // If related to a property, check property exists and increment property inquiriesCount
     if (dto.relatedPropertyId) {
       const property = await this.prisma.property.findUnique({
@@ -159,7 +172,7 @@ export class InquiriesService {
         senderName: name,
         senderPhone: phone,
         senderEmail: email,
-        type: dto.type,
+        type: inquiryType,
         relatedPropertyId: dto.relatedPropertyId,
         subject: dto.subject || "استفسار من الموقع",
         message: dto.message,
