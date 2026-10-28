@@ -196,6 +196,7 @@ model User {
   clients       Client[]      @relation("AssignedAgentClients")
   inquiries     Inquiry[]     @relation("AssignedAgentInquiries")
   auditLogs     AuditLog[]
+  reviewedRecoveryRequests PasswordRecoveryRequest[] @relation("ReviewedRecoveryRequests")
 
   @@map("admin_users")
 }
@@ -389,11 +390,23 @@ model Appointment {
 // CLIENTS & CRM
 // ==========================================
 
+enum PasswordRecoveryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  EXPIRED
+}
+
 model Client {
   id                   String               @id @default(uuid())
   name                 String
-  phone                String
-  email                String?
+  firstName            String?
+  lastName             String?
+  region               String?
+  phone                String               @unique
+  email                String?              @unique
+  passwordHash         String?
   status               LeadStatus           @default(NEW)
   source               LeadSource           @default(WEBSITE_INQUIRY)
   budgetMin            Decimal?             @db.Decimal(14, 2)
@@ -410,10 +423,34 @@ model Client {
   interestedProperty   Property?            @relation("InterestedProperty", fields: [interestedPropertyId], references: [id])
   assignedEmployee     User?                @relation("AssignedAgentClients", fields: [assignedEmployeeId], references: [id])
   timeline             ClientTimelineEvent[]
+  recoveryRequests     PasswordRecoveryRequest[]
 
   @@index([status])
   @@index([phone])
   @@map("clients")
+}
+
+model PasswordRecoveryRequest {
+  id                  String                 @id @default(uuid())
+  clientId            String
+  requestedEmail      String
+  requestedPhone      String?
+  status              PasswordRecoveryStatus @default(PENDING)
+  reviewedByUserId    String?
+  reviewedAt          DateTime?
+  adminNotes          String?
+  resetToken          String?                @unique
+  resetTokenExpiresAt DateTime?
+  usedAt              DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  client              Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reviewedByUser      User?                  @relation("ReviewedRecoveryRequests", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([status])
+  @@map("password_recovery_requests")
 }
 
 model ClientTimelineEvent {
