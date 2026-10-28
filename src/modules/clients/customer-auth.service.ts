@@ -311,65 +311,66 @@ export class CustomerAuthService {
       "https://eshraqat-al-mustaqbal-website.vercel.app";
 
     if (dto.status === "APPROVED") {
-      const resetToken = crypto.randomBytes(32).toString("hex");
-      const resetTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      // 1. Generate or use admin-specified password
+      const newPlainPassword =
+        dto.newPassword && dto.newPassword.trim().length >= 6
+          ? dto.newPassword.trim()
+          : `Esh@${Math.floor(100000 + Math.random() * 900000)}`;
 
+      // 2. Hash and directly set the client's new password
+      const passwordHash = await bcrypt.hash(newPlainPassword, 10);
+      await this.prisma.client.update({
+        where: { id: request.clientId },
+        data: { passwordHash },
+      });
+
+      // 3. Update the recovery request
       const updated = await this.prisma.passwordRecoveryRequest.update({
         where: { id },
         data: {
           status: PasswordRecoveryStatus.APPROVED,
-          resetToken,
-          resetTokenExpiresAt,
           reviewedByUserId: reviewerUser.id,
           reviewedAt: new Date(),
-          adminNotes: dto.adminNotes || "تمت الموافقة من قبل الإدارة",
+          adminNotes: dto.adminNotes
+            ? `${dto.adminNotes} (تم تعيين الرمز: ${newPlainPassword})`
+            : `تم تعيين كلمة المرور الجديدة بواسطة الإدارة: ${newPlainPassword}`,
         },
-        include: { client: true },
+        include: {
+          client: true,
+          reviewedByUser: {
+            select: { id: true, name: true, email: true },
+          },
+        },
       });
 
-      const resetLink = `${websiteBaseUrl}/reset-password?token=${resetToken}`;
+      // 4. Format WhatsApp message and direct click-to-chat URL
+      const rawPhone = request.client.phone || request.requestedPhone || "";
+      const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
+      const whatsappText = `مرحباً أستاذ ${request.client.name} 🌸\nبناءً على طلب استعادة حسابكم لدى *شركة إشراقة المستقبل العقارية*، تم تعيين كلمة المرور الجديدة لحسابكم بنجاح:\n\n🔑 *كلمة المرور الجديدة:* \`${newPlainPassword}\`\n\n🌐 *رابط الدخول للموقع:*\n${websiteBaseUrl}\n\nنتمنى لكم تجربة مميزة وممتعة! ✨`;
+      const whatsappUrl = cleanPhone
+        ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappText)}`
+        : "";
 
-      // Send email to customer if Resend is available
-      if (this.resend && request.client.email) {
-        try {
-          const fromEmail = this.configService.get<string>("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
-          await this.resend.emails.send({
-            from: fromEmail,
-            to: request.client.email,
-            subject: "رابط استعادة كلمة المرور المعتمد | إشراقة المستقبل",
-            html: `
-              <div dir="rtl" style="font-family: Arial, sans-serif; background: #0E0E12; color: #FFFFFF; padding: 32px; border-radius: 16px; text-align: center;">
-                <h2 style="color: #C5A059; margin-bottom: 12px;">إشراقة المستقبل للعقارات</h2>
-                <p style="font-size: 15px; color: #E4E4E7;">مرحباً ${request.client.name}،</p>
-                <p style="font-size: 14px; color: #A1A1AA; line-height: 1.6;">تمت مراجعة واعتماد طلب استعادة كلمة المرور الخاص بحسابك من قبل فريق الإدارة. يمكنك تعيين كلمة المرور الجديدة عبر الرابط التالي:</p>
-                <div style="margin: 28px 0;">
-                  <a href="${resetLink}" style="background: linear-gradient(135deg, #C5A059, #D4AF37); color: #000000; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: bold; font-size: 15px; display: inline-block;">تعيين كلمة المرور الجديدة</a>
-                </div>
-                <p style="font-size: 12px; color: #71717A;">الرابط صالح للاستخدام مرة واحدة ولمدة 24 ساعة فقط.</p>
-              </div>
-            `,
-          });
-        } catch (mailErr) {
-          console.warn("[Password Recovery Email Error]:", mailErr);
-        }
-      }
-
-      // Add timeline event
+      // 5. Add timeline event
       await this.prisma.clientTimelineEvent.create({
         data: {
           clientId: request.clientId,
           type: TimelineEventType.NOTE,
-          title: "اعتماد استعادة كلمة المرور",
-          description: `تمت الموافقة على طلب استعادة كلمة المرور بواسطة المسؤول (${reviewerUser.name})`,
+          title: "إعادة تعيين كلمة المرور بواسطة الإدارة",
+          description: `قام المسؤول (${reviewerUser.name}) بتعيين كلمة مرور جديدة للعميل (${newPlainPassword}) وإرسالها عبر الواتساب.`,
           authorName: reviewerUser.name,
         },
       });
 
       return {
-        success: true,
-        message: "تمت الموافقة على طلب استعادة كلمة المرور بنجاح وتم إنشاء رابط التعيين",
-        resetLink,
-        request: updated,
+        ...updated,
+        reviewedBy: updated.reviewedByUser,
+        newPassword: newPlainPassword,
+        clientPhone: request.client.phone,
+        clientName: request.client.name,
+        whatsappText,
+        whatsappUrl,
+        message: "تم تعيين كلمة المرور الجديدة للعميل بنجاح وجاهزة للإرسال عبر واتساب",
       };
     } else {
       const updated = await this.prisma.passwordRecoveryRequest.update({

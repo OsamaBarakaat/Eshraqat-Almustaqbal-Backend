@@ -94,6 +94,14 @@ export class ReviewRecoveryRequestDto {
   @IsString()
   @IsOptional()
   adminNotes?: string;
+
+  @ApiPropertyOptional({
+    example: "Esh@123456",
+    description: "كلمة المرور الجديدة للعميل (إذا تُركت فارغة سيتم توليد رمز عشوائي قوي تلقائياً)",
+  })
+  @IsString()
+  @IsOptional()
+  newPassword?: string;
 }
 
 export class QueryRecoveryRequestsDto extends PaginationQueryDto {
