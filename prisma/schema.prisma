@@ -286,6 +286,7 @@ model Property {
   streetAddress       String?
   latitude            Float?
   longitude           Float?
+  googleMapsUrl       String?
 
   provinceId          String?
   cityId              String?

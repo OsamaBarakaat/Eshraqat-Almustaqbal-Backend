@@ -143,6 +143,11 @@ export class CreatePropertyDto {
   @IsOptional()
   longitude?: number;
 
+  @ApiPropertyOptional({ example: "https://maps.google.com/?q=24.7136,46.6753" })
+  @IsString()
+  @IsOptional()
+  googleMapsUrl?: string;
+
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()

@@ -389,6 +389,7 @@ export class PropertiesService {
         streetAddress: dto.streetAddress,
         latitude: dto.latitude,
         longitude: dto.longitude,
+        googleMapsUrl: dto.googleMapsUrl,
 
         provinceId: dto.provinceId,
         cityId: dto.cityId,
@@ -497,6 +498,7 @@ export class PropertiesService {
           ...(dto.streetAddress !== undefined && { streetAddress: dto.streetAddress }),
           ...(dto.latitude !== undefined && { latitude: dto.latitude }),
           ...(dto.longitude !== undefined && { longitude: dto.longitude }),
+          ...(dto.googleMapsUrl !== undefined && { googleMapsUrl: dto.googleMapsUrl }),
 
           ...(dto.provinceId !== undefined && { provinceId: dto.provinceId }),
           ...(dto.cityId !== undefined && { cityId: dto.cityId }),
