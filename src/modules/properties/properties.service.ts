@@ -267,13 +267,17 @@ export class PropertiesService {
 
     if (provinceId) where.provinceId = provinceId;
 
-    if (andConditions.length > 0) {
-      where.AND = andConditions;
+    if (String(hasDiscount) === "true") {
+      andConditions.push({
+        OR: [
+          { discountPercentage: { gt: 0 } },
+          { originalPrice: { not: null, gt: 0 } },
+        ],
+      });
     }
 
-    if (String(hasDiscount) === "true") {
-      where.originalPrice = { not: null };
-      where.discountPercentage = { gt: 0 };
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -434,14 +438,22 @@ export class PropertiesService {
 
     // Discount calculations
     let calculatedPrice = dto.price ?? Number(existing.price);
-    let originalPrice = dto.originalPrice;
-    let discountPercentage = dto.discountPercentage;
+    let originalPrice =
+      dto.originalPrice !== undefined
+        ? dto.originalPrice
+        : existing.originalPrice
+        ? Number(existing.originalPrice)
+        : undefined;
+    let discountPercentage =
+      dto.discountPercentage !== undefined
+        ? dto.discountPercentage
+        : existing.discountPercentage ?? undefined;
 
     if (originalPrice && discountPercentage && discountPercentage > 0) {
-      calculatedPrice = Math.round(originalPrice * (1 - discountPercentage / 100));
-    } else if (originalPrice && calculatedPrice && originalPrice > calculatedPrice) {
-      discountPercentage = Math.round(((originalPrice - calculatedPrice) / originalPrice) * 100);
-    } else {
+      calculatedPrice = Math.round(Number(originalPrice) * (1 - discountPercentage / 100));
+    } else if (originalPrice && calculatedPrice && Number(originalPrice) > Number(calculatedPrice)) {
+      discountPercentage = Math.round(((Number(originalPrice) - Number(calculatedPrice)) / Number(originalPrice)) * 100);
+    } else if (dto.originalPrice === null || dto.originalPrice === 0) {
       originalPrice = null as unknown as number;
       discountPercentage = null as unknown as number;
     }
