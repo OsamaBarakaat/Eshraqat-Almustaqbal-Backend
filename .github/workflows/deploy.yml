@@ -58,16 +58,26 @@ jobs:
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "${SSH_PRIVATE_KEY}" ]; then
-            echo "ERROR: SSH_PRIVATE_KEY secret is empty or not set in this repository's GitHub Actions secrets!"
+            echo "ERROR: SSH_PRIVATE_KEY secret is empty or not set!"
             exit 1
           fi
           mkdir -p ~/.ssh
           if printf '%s' "${SSH_PRIVATE_KEY}" | grep -q "BEGIN"; then
             printf '%s\n' "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_ed25519
+          elif printf '%s' "${SSH_PRIVATE_KEY}" | tr -d ' \n\r' | base64 -d 2>/dev/null | grep -q "BEGIN"; then
+            printf '%s' "${SSH_PRIVATE_KEY}" | tr -d ' \n\r' | base64 -d | tr -d '\r' > ~/.ssh/id_ed25519
           else
-            printf '%s' "${SSH_PRIVATE_KEY}" | tr -d ' \n\r' | base64 -d > ~/.ssh/id_ed25519
+            {
+              echo "-----BEGIN OPENSSH PRIVATE KEY-----"
+              printf '%s\n' "${SSH_PRIVATE_KEY}" | tr -d '\r' | grep -v -- "-----" | tr -d ' '
+              echo "-----END OPENSSH PRIVATE KEY-----"
+            } > ~/.ssh/id_ed25519
           fi
           chmod 600 ~/.ssh/id_ed25519
+          if ! ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
+            echo "ERROR: SSH_PRIVATE_KEY in GitHub Secrets is incomplete or corrupted (received $(printf '%s\n' "${SSH_PRIVATE_KEY}" | wc -l) lines; ~/.ssh/id_rsa has 38 lines)."
+            exit 1
+          fi
           ssh-keyscan -H "${SSH_HOST}" >> ~/.ssh/known_hosts
 
           ssh "${SSH_USER}@${SSH_HOST}" "mkdir -p ~/k8s-backend"
