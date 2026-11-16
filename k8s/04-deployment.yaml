@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-uploads-pvc
+  namespace: eshraqat
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eshraqat-backend
+  namespace: eshraqat
+  labels:
+    app: eshraqat-backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4000
+      targetPort: 4000
+      protocol: TCP
+      name: http
+  selector:
+    app: eshraqat-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eshraqat-backend
+  namespace: eshraqat
+  labels:
+    app: eshraqat-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eshraqat-backend
+  template:
+    metadata:
+      labels:
+        app: eshraqat-backend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z supabase-db 5432; do echo 'Waiting for Postgres...'; sleep 2; done"]
+      containers:
+        - name: backend
+          image: ghcr.io/osamabarakaat/eshraqat-almustaqbal-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secrets
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/public/uploads
+          readinessProbe:
+            tcpSocket:
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: backend-uploads-pvc
+

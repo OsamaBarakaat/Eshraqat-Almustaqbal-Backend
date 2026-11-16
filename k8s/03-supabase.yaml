@@ -1,0 +1,779 @@
+# ==============================================================================
+# Self-Hosted Supabase Stack for Kubernetes (k3s)
+# Includes: PostgreSQL, GoTrue (Auth), PostgREST, Storage API + Imgproxy,
+#           postgres-meta, Supabase Studio, Kong Gateway, and Bucket Init Job
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-db-init
+  namespace: eshraqat
+data:
+  00-init-supabase.sql: |
+    CREATE SCHEMA IF NOT EXISTS extensions;
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA public;
+
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE SCHEMA IF NOT EXISTS storage;
+    CREATE SCHEMA IF NOT EXISTS _analytics;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+        CREATE ROLE anon NOLOGIN NOINHERIT;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
+        CREATE ROLE authenticated NOLOGIN NOINHERIT;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+        CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_admin') THEN
+        CREATE ROLE supabase_admin LOGIN SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticator') THEN
+        CREATE ROLE authenticator LOGIN NOINHERIT;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+        CREATE ROLE supabase_auth_admin LOGIN NOINHERIT CREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'supabase_storage_admin') THEN
+        CREATE ROLE supabase_storage_admin LOGIN NOINHERIT CREATEROLE;
+      END IF;
+    END
+    $$;
+
+    GRANT anon, authenticated, service_role TO authenticator;
+    GRANT anon, authenticated, service_role TO postgres;
+    GRANT ALL ON SCHEMA auth TO postgres, supabase_admin, supabase_auth_admin;
+    GRANT ALL ON SCHEMA storage TO postgres, supabase_admin, supabase_storage_admin, service_role;
+    GRANT USAGE ON SCHEMA public, extensions, storage TO anon, authenticated, service_role;
+    ALTER ROLE postgres SET search_path TO public, extensions;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-db
+  namespace: eshraqat
+  labels:
+    app: supabase-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: supabase-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: supabase-db
+  namespace: eshraqat
+spec:
+  serviceName: supabase-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-db
+  template:
+    metadata:
+      labels:
+        app: supabase-db
+    spec:
+      containers:
+        - name: postgres
+          image: supabase/postgres:15.8.1.060
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_DB
+              value: "postgres"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_HOST
+              value: "/var/run/postgresql"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_JWT_SECRET
+            - name: JWT_EXP
+              value: "3600"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d/00-init-supabase.sql
+              subPath: 00-init-supabase.sql
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: supabase-db-init
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 20Gi
+---
+# ---- Supabase GoTrue (Auth) ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-auth
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 9999
+      targetPort: 9999
+  selector:
+    app: supabase-auth
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-auth
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-auth
+  template:
+    metadata:
+      labels:
+        app: supabase-auth
+    spec:
+      containers:
+        - name: auth
+          image: supabase/gotrue:v2.170.0
+          ports:
+            - containerPort: 9999
+          env:
+            - name: GOTRUE_API_HOST
+              value: "0.0.0.0"
+            - name: GOTRUE_API_PORT
+              value: "9999"
+            - name: API_EXTERNAL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: API_EXTERNAL_URL
+            - name: GOTRUE_SITE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: SITE_URL
+            - name: GOTRUE_DB_DRIVER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+            - name: GOTRUE_DB_DATABASE_URL
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@supabase-db:5432/postgres?search_path=auth"
+            - name: GOTRUE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_JWT_SECRET
+            - name: GOTRUE_JWT_EXP
+              value: "3600"
+            - name: GOTRUE_JWT_DEFAULT_GROUP_NAME
+              value: "authenticated"
+            - name: GOTRUE_JWT_ADMIN_ROLES
+              value: "service_role"
+            - name: GOTRUE_JWT_AUD
+              value: "authenticated"
+---
+# ---- Supabase PostgREST ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-rest
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: supabase-rest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-rest
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-rest
+  template:
+    metadata:
+      labels:
+        app: supabase-rest
+    spec:
+      containers:
+        - name: rest
+          image: postgrest/postgrest:v12.2.8
+          ports:
+            - containerPort: 3000
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGRST_DB_URI
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@supabase-db:5432/postgres"
+            - name: PGRST_DB_SCHEMAS
+              value: "public,storage"
+            - name: PGRST_DB_ANON_ROLE
+              value: "anon"
+            - name: PGRST_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_JWT_SECRET
+            - name: PGRST_DB_USE_LEGACY_GUCS
+              value: "false"
+---
+# ---- Supabase Imgproxy + Storage API ----
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: supabase-storage-pvc
+  namespace: eshraqat
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-imgproxy
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 5001
+      targetPort: 5001
+  selector:
+    app: supabase-imgproxy
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-imgproxy
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-imgproxy
+  template:
+    metadata:
+      labels:
+        app: supabase-imgproxy
+    spec:
+      containers:
+        - name: imgproxy
+          image: darthsim/imgproxy:v3.8.0
+          ports:
+            - containerPort: 5001
+          env:
+            - name: IMGPROXY_BIND
+              value: ":5001"
+            - name: IMGPROXY_LOCAL_FILESYSTEM_ROOT
+              value: "/"
+            - name: IMGPROXY_USE_ETAG
+              value: "true"
+            - name: IMGPROXY_ENABLE_WEBP_DETECTION
+              value: "true"
+          volumeMounts:
+            - name: storage-data
+              mountPath: /var/lib/storage
+              readOnly: true
+      volumes:
+        - name: storage-data
+          persistentVolumeClaim:
+            claimName: supabase-storage-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-storage
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 5000
+      targetPort: 5000
+  selector:
+    app: supabase-storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-storage
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-storage
+  template:
+    metadata:
+      labels:
+        app: supabase-storage
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z supabase-db 5432; do sleep 2; done"]
+      containers:
+        - name: storage
+          image: supabase/storage-api:v1.19.1
+          ports:
+            - containerPort: 5000
+          env:
+            - name: ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_ANON_KEY
+            - name: SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_SERVICE_ROLE_KEY
+            - name: POSTGREST_URL
+              value: "http://supabase-rest:3000"
+            - name: PGRST_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_JWT_SECRET
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@supabase-db:5432/postgres"
+            - name: FILE_SIZE_LIMIT
+              value: "52428800"
+            - name: STORAGE_BACKEND
+              value: "file"
+            - name: FILE_STORAGE_BACKEND_PATH
+              value: "/var/lib/storage"
+            - name: TENANT_ID
+              value: "stub"
+            - name: REGION
+              value: "stub"
+            - name: GLOBAL_S3_BUCKET
+              value: "stub"
+            - name: ENABLE_IMAGE_TRANSFORMATION
+              value: "true"
+            - name: IMGPROXY_URL
+              value: "http://supabase-imgproxy:5001"
+          volumeMounts:
+            - name: storage-data
+              mountPath: /var/lib/storage
+      volumes:
+        - name: storage-data
+          persistentVolumeClaim:
+            claimName: supabase-storage-pvc
+---
+# ---- Supabase Postgres-Meta & Studio ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-meta
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: supabase-meta
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-meta
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-meta
+  template:
+    metadata:
+      labels:
+        app: supabase-meta
+    spec:
+      containers:
+        - name: meta
+          image: supabase/postgres-meta:v0.86.1
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PG_META_PORT
+              value: "8080"
+            - name: PG_META_DB_HOST
+              value: "supabase-db"
+            - name: PG_META_DB_PORT
+              value: "5432"
+            - name: PG_META_DB_NAME
+              value: "postgres"
+            - name: PG_META_DB_USER
+              value: "postgres"
+            - name: PG_META_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-studio
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: supabase-studio
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-studio
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-studio
+  template:
+    metadata:
+      labels:
+        app: supabase-studio
+    spec:
+      containers:
+        - name: studio
+          image: supabase/studio:20250224-d10db0f
+          ports:
+            - containerPort: 3000
+          env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: STUDIO_PG_META_URL
+              value: "http://supabase-meta:8080"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DEFAULT_ORGANIZATION_NAME
+              value: "Eshraqat Al-Mustaqbal"
+            - name: DEFAULT_PROJECT_NAME
+              value: "Eshraqat Real Estate"
+            - name: SUPABASE_URL
+              value: "http://supabase-kong:8000"
+            - name: SUPABASE_PUBLIC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: SUPABASE_PUBLIC_URL
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_ANON_KEY
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_SERVICE_ROLE_KEY
+            - name: AUTH_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_JWT_SECRET
+---
+# ---- Supabase Kong Gateway ----
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-kong-config
+  namespace: eshraqat
+data:
+  kong.yml.tpl: |
+    _format_version: "2.1"
+    _transform: true
+
+    consumers:
+      - username: DASHBOARD
+      - username: anon
+        keyauth_credentials:
+          - key: __SUPABASE_ANON_KEY__
+      - username: service_role
+        keyauth_credentials:
+          - key: __SUPABASE_SERVICE_ROLE_KEY__
+
+    acls:
+      - consumer: anon
+        group: anon
+      - consumer: service_role
+        group: admin
+
+    basicauth_credentials:
+      - consumer: DASHBOARD
+        username: __DASHBOARD_USERNAME__
+        password: __DASHBOARD_PASSWORD__
+
+    services:
+      - name: auth-v1
+        url: http://supabase-auth:9999/
+        routes:
+          - name: auth-v1-all
+            strip_path: true
+            paths:
+              - /auth/v1/
+        plugins:
+          - name: cors
+          - name: key-auth
+            config:
+              hide_credentials: false
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+                - anon
+
+      - name: rest-v1
+        url: http://supabase-rest:3000/
+        routes:
+          - name: rest-v1-all
+            strip_path: true
+            paths:
+              - /rest/v1/
+        plugins:
+          - name: cors
+          - name: key-auth
+            config:
+              hide_credentials: true
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+                - anon
+
+      - name: storage-v1
+        url: http://supabase-storage:5000/
+        routes:
+          - name: storage-v1-all
+            strip_path: true
+            paths:
+              - /storage/v1/
+        plugins:
+          - name: cors
+
+      - name: meta
+        url: http://supabase-meta:8080/
+        routes:
+          - name: meta-all
+            strip_path: true
+            paths:
+              - /pg/
+        plugins:
+          - name: key-auth
+            config:
+              hide_credentials: false
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+
+      - name: dashboard
+        url: http://supabase-studio:3000/
+        routes:
+          - name: dashboard-all
+            strip_path: true
+            paths:
+              - /
+        plugins:
+          - name: cors
+          - name: basic-auth
+            config:
+              hide_credentials: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-kong
+  namespace: eshraqat
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: supabase-kong
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-kong
+  namespace: eshraqat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-kong
+  template:
+    metadata:
+      labels:
+        app: supabase-kong
+    spec:
+      initContainers:
+        - name: render-kong-config
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              sed -e "s|__SUPABASE_ANON_KEY__|${SUPABASE_ANON_KEY}|g" \
+                  -e "s|__SUPABASE_SERVICE_ROLE_KEY__|${SUPABASE_SERVICE_ROLE_KEY}|g" \
+                  -e "s|__DASHBOARD_USERNAME__|${DASHBOARD_USERNAME}|g" \
+                  -e "s|__DASHBOARD_PASSWORD__|${DASHBOARD_PASSWORD}|g" \
+                  /tpl/kong.yml.tpl > /kong/kong.yml
+          env:
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_ANON_KEY
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_SERVICE_ROLE_KEY
+            - name: DASHBOARD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DASHBOARD_USERNAME
+            - name: DASHBOARD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DASHBOARD_PASSWORD
+          volumeMounts:
+            - name: kong-tpl
+              mountPath: /tpl
+            - name: kong-rendered
+              mountPath: /kong
+      containers:
+        - name: kong
+          image: kong:2.8.1
+          ports:
+            - containerPort: 8000
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: "/kong/kong.yml"
+            - name: KONG_DNS_ORDER
+              value: "LAST,A,CNAME"
+            - name: KONG_PLUGINS
+              value: "request-transformer,cors,key-auth,acl,basic-auth"
+            - name: KONG_NGINX_PROXY_PROXY_BUFFER_SIZE
+              value: "160k"
+            - name: KONG_NGINX_PROXY_PROXY_BUFFERS
+              value: "64 160k"
+          volumeMounts:
+            - name: kong-rendered
+              mountPath: /kong
+      volumes:
+        - name: kong-tpl
+          configMap:
+            name: supabase-kong-config
+        - name: kong-rendered
+          emptyDir: {}
+---
+# ---- Job: Automatically Create Public Storage Bucket ("properties") ----
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: supabase-bucket-init
+  namespace: eshraqat
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-bucket
+          image: curlimages/curl:8.10.1
+          command:
+            - sh
+            - -c
+            - |
+              until curl -fsS http://supabase-kong:8000/storage/v1/status >/dev/null 2>&1; do
+                echo "Waiting for Supabase Storage API via Kong..."
+                sleep 5
+              done
+              curl -sS -X POST "http://supabase-kong:8000/storage/v1/bucket" \
+                -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+                -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+                -H "Content-Type: application/json" \
+                -d "{\"id\":\"${SUPABASE_STORAGE_BUCKET}\",\"name\":\"${SUPABASE_STORAGE_BUCKET}\",\"public\":true}" || true
+              echo "Bucket initialization complete."
+          env:
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: SUPABASE_SERVICE_ROLE_KEY
+            - name: SUPABASE_STORAGE_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: SUPABASE_STORAGE_BUCKET
+
