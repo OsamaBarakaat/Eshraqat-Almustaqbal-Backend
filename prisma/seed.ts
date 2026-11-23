@@ -36,6 +36,7 @@ async function main() {
     "team",
     "settings",
     "locations",
+    "mapInteractions",
   ];
 
   const allActions: ActionType[] = [

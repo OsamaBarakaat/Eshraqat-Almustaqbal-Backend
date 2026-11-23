@@ -14,6 +14,7 @@ import { InquiriesModule } from "./modules/inquiries/inquiries.module";
 import { CmsModule } from "./modules/cms/cms.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { AuditModule } from "./modules/audit/audit.module";
+import { MapInteractionsModule } from "./modules/map-interactions/map-interactions.module";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 
@@ -42,6 +43,7 @@ import { AppService } from "./app.service";
     InquiriesModule,
     CmsModule,
     DashboardModule,
+    MapInteractionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

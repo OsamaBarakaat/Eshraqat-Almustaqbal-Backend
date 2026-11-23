@@ -42,6 +42,7 @@ enum ModuleType {
   team
   settings
   locations
+  mapInteractions
 }
 
 enum ActionType {
@@ -335,6 +336,7 @@ model Property {
   appointments         Appointment[]
   inquiries            Inquiry[]
   clients              Client[]          @relation("InterestedProperty")
+  mapInteractions      PropertyMapInteraction[]
 
   @@index([category, status])
   @@index([purpose, status])
@@ -425,6 +427,7 @@ model Client {
   assignedEmployee     User?                @relation("AssignedAgentClients", fields: [assignedEmployeeId], references: [id])
   timeline             ClientTimelineEvent[]
   recoveryRequests     PasswordRecoveryRequest[]
+  mapInteractions      PropertyMapInteraction[]
 
   @@index([status])
   @@index([phone])
@@ -467,6 +470,21 @@ model ClientTimelineEvent {
 
   @@index([clientId])
   @@map("client_timeline_events")
+}
+
+model PropertyMapInteraction {
+  id         String   @id @default(uuid())
+  clientId   String
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([propertyId])
+  @@index([createdAt])
+  @@map("property_map_interactions")
 }
 
 // ==========================================

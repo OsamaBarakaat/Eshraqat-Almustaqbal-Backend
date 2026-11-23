@@ -131,16 +131,19 @@ export class PropertiesService {
       select: { code: true },
     });
 
-    if (!lastProperty || !lastProperty.code.startsWith("ESH-")) {
-      return "ESH-1001";
+    if (!lastProperty || !lastProperty.code) {
+      return "ESHQ1001";
     }
 
-    const numericPart = parseInt(lastProperty.code.replace("ESH-", ""), 10);
-    if (isNaN(numericPart)) {
-      return `ESH-${Date.now().toString().slice(-4)}`;
+    const matches = lastProperty.code.match(/\d+$/);
+    if (!matches) {
+      return `ESHQ${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
-    return `ESH-${numericPart + 1}`;
+    const numericPart = parseInt(matches[0], 10);
+    const prefix = lastProperty.code.replace(/\d+$/, "");
+    const finalPrefix = prefix.length === 4 ? prefix.toUpperCase() : "ESHQ";
+    return `${finalPrefix}${numericPart + 1}`;
   }
 
   private async generateUniqueSlug(baseText: string, currentId?: string): Promise<string> {
@@ -334,7 +337,7 @@ export class PropertiesService {
 
   // ================= CREATE PROPERTY =================
   async create(dto: CreatePropertyDto) {
-    const code = dto.code || (await this.generateUniqueCode());
+    const code = dto.code ? dto.code.trim().toUpperCase() : (await this.generateUniqueCode());
     const slug = dto.slug
       ? await this.generateUniqueSlug(dto.slug)
       : await this.generateUniqueSlug(dto.title);
@@ -479,6 +482,7 @@ export class PropertiesService {
       return tx.property.update({
         where: { id },
         data: {
+          ...(dto.code && { code: dto.code.trim().toUpperCase() }),
           ...(dto.title && { title: dto.title }),
           ...(dto.shortDescription && { shortDescription: dto.shortDescription }),
           ...(dto.fullDescription && { fullDescription: dto.fullDescription }),
