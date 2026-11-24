@@ -263,10 +263,11 @@ model District {
 
 model Property {
   id                  String             @id @default(uuid())
-  code                String             @unique // e.g. ESH-1001
+  code                String             @unique // e.g. ESH-1001 or SPL National Address (RRRD2929)
+  licenseNumber       String?            // Advertising/contract license number (رقم ترخيص الإعلان/المنصة)
   title               String
   shortDescription    String
-  fullDescription     String
+  fullDescription     String?
   category            PropertyCategory
   purpose             PropertyPurpose
   status              PropertyStatus     @default(PUBLISHED)

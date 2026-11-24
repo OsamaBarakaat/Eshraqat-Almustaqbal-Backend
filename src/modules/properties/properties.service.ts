@@ -372,9 +372,10 @@ export class PropertiesService {
     return this.prisma.property.create({
       data: {
         code,
+        licenseNumber: dto.licenseNumber?.trim() || null,
         title: dto.title,
         shortDescription: dto.shortDescription,
-        fullDescription: dto.fullDescription,
+        fullDescription: dto.fullDescription || null,
         category: dto.category,
         purpose: dto.purpose,
         status: dto.status || PropertyStatus.PUBLISHED,
@@ -483,9 +484,10 @@ export class PropertiesService {
         where: { id },
         data: {
           ...(dto.code && { code: dto.code.trim().toUpperCase() }),
+          ...(dto.licenseNumber !== undefined && { licenseNumber: dto.licenseNumber?.trim() || null }),
           ...(dto.title && { title: dto.title }),
           ...(dto.shortDescription && { shortDescription: dto.shortDescription }),
-          ...(dto.fullDescription && { fullDescription: dto.fullDescription }),
+          ...(dto.fullDescription !== undefined && { fullDescription: dto.fullDescription || null }),
           ...(dto.category && { category: dto.category }),
           ...(dto.purpose && { purpose: dto.purpose }),
           ...(dto.status && { status: dto.status }),

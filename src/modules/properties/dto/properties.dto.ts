@@ -43,6 +43,11 @@ export class CreatePropertyDto {
   @IsOptional()
   code?: string;
 
+  @ApiPropertyOptional({ example: "7200012345", description: "رقم ترخيص الإعلان العقاري" })
+  @IsString()
+  @IsOptional()
+  licenseNumber?: string;
+
   @ApiProperty({ example: "فيلا مودرن فاخرة بحي النرجس" })
   @IsString()
   @IsNotEmpty()
@@ -53,10 +58,10 @@ export class CreatePropertyDto {
   @IsNotEmpty()
   shortDescription: string;
 
-  @ApiProperty({ example: "<p>تفاصيل الفيلا بالكامل...</p>" })
+  @ApiPropertyOptional({ example: "<p>تفاصيل الفيلا بالكامل...</p>" })
   @IsString()
-  @IsNotEmpty()
-  fullDescription: string;
+  @IsOptional()
+  fullDescription?: string;
 
   @ApiProperty({ enum: PropertyCategory, example: PropertyCategory.RESIDENTIAL })
   @IsEnum(PropertyCategory)
