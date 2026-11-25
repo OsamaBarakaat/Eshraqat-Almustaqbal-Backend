@@ -38,12 +38,12 @@ export class PropertyImageDto {
 }
 
 export class CreatePropertyDto {
-  @ApiPropertyOptional({ example: "ESH-1045" })
+  @ApiPropertyOptional({ example: "RRRD2929", description: "العنوان الوطني (4 أحرف و 4 أرقام)" })
   @IsString()
   @IsOptional()
   code?: string;
 
-  @ApiPropertyOptional({ example: "7200012345", description: "رقم ترخيص الإعلان العقاري" })
+  @ApiPropertyOptional({ example: "7200123456", description: "رقم ترخيص الإعلان العقاري (10 أرقام على الأقل)" })
   @IsString()
   @IsOptional()
   licenseNumber?: string;
