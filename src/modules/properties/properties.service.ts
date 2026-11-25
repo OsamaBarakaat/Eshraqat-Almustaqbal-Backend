@@ -221,7 +221,11 @@ export class PropertiesService {
 
     if (category) where.category = category;
     if (purpose) where.purpose = purpose;
-    if (status) where.status = status;
+    if (status) {
+      where.status = status;
+    } else if ((query as any).statuses && Array.isArray((query as any).statuses)) {
+      where.status = { in: (query as any).statuses };
+    }
     if (featured !== undefined) where.featured = String(featured) === "true";
 
     // 2. Hybrid location filtering (matching cityId OR textual city name)
@@ -572,9 +576,16 @@ export class PropertiesService {
 
   // ================= PUBLIC WEBSITE METHODS =================
   async findPublicProperties(query: QueryPropertiesDto) {
-    // Only published properties for public website
-    const modifiedQuery = { ...query, status: PropertyStatus.PUBLISHED };
-    return this.findAll(modifiedQuery);
+    // If a specific status is queried, respect it.
+    // Otherwise, show all public-facing properties: PUBLISHED, SOLD, RENTED (keep sold/rented always visible)
+    if (query.status) {
+      return this.findAll(query);
+    }
+    const modifiedQuery = {
+      ...query,
+      statuses: [PropertyStatus.PUBLISHED, PropertyStatus.SOLD, PropertyStatus.RENTED],
+    };
+    return this.findAll(modifiedQuery as any);
   }
 
   async findBySlug(slug: string) {
@@ -588,7 +599,10 @@ export class PropertiesService {
       include: this.defaultIncludes,
     });
 
-    if (!property || property.status !== PropertyStatus.PUBLISHED) {
+    if (
+      !property ||
+      !([PropertyStatus.PUBLISHED, PropertyStatus.SOLD, PropertyStatus.RENTED] as PropertyStatus[]).includes(property.status)
+    ) {
       throw new NotFoundException("العقار المطلوب غير متوفر حالياً");
     }
 
@@ -603,7 +617,10 @@ export class PropertiesService {
 
   async getFeatured() {
     return this.prisma.property.findMany({
-      where: { status: PropertyStatus.PUBLISHED, featured: true },
+      where: {
+        status: { in: [PropertyStatus.PUBLISHED, PropertyStatus.SOLD, PropertyStatus.RENTED] },
+        featured: true,
+      },
       include: this.defaultIncludes,
       take: 8,
       orderBy: { createdAt: "desc" },
@@ -613,7 +630,7 @@ export class PropertiesService {
   async getDiscountOffers() {
     return this.prisma.property.findMany({
       where: {
-        status: PropertyStatus.PUBLISHED,
+        status: { in: [PropertyStatus.PUBLISHED, PropertyStatus.SOLD, PropertyStatus.RENTED] },
         originalPrice: { not: null },
         discountPercentage: { gt: 0 },
       },

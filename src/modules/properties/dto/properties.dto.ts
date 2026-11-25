@@ -10,6 +10,7 @@ import {
   ValidateNested,
   Min,
   Max,
+  Matches,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { PropertyCategory, PropertyPurpose, PropertyStatus, FurnishingStatus } from "@prisma/client";
@@ -43,9 +44,10 @@ export class CreatePropertyDto {
   @IsOptional()
   code?: string;
 
-  @ApiPropertyOptional({ example: "7200123456", description: "رقم ترخيص الإعلان العقاري (10 أرقام على الأقل)" })
+  @ApiPropertyOptional({ example: "7200123456", description: "رقم ترخيص الإعلان العقاري (10 أرقام فقط)" })
   @IsString()
   @IsOptional()
+  @Matches(/^\d{10}$/, { message: "رقم ترخيص الإعلان العقاري يجب أن يتكون من 10 أرقام فقط" })
   licenseNumber?: string;
 
   @ApiProperty({ example: "فيلا مودرن فاخرة بحي النرجس" })
