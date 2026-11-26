@@ -8,11 +8,10 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@example.com
+    email: admin@eshraqatalmustaqbal.com
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
       - http01:
           ingress:
             ingressClassName: traefik
-

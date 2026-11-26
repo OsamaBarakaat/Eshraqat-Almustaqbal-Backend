@@ -4,18 +4,17 @@ metadata:
   name: backend-config
   namespace: eshraqat
 data:
-  # ---- Domains (update when switching from example.com) ----
-  WEBSITE_DOMAIN: "example.com"
-  DASHBOARD_DOMAIN: "dashboard.example.com"
-  API_DOMAIN: "api.example.com"
-  SUPABASE_DOMAIN: "supabase.example.com"
+  # ---- Domain & Sub-path URLs ----
+  WEBSITE_DOMAIN: "eshraqatalmustaqbal.com"
+  DASHBOARD_DOMAIN: "eshraqatalmustaqbal.com"
+  API_DOMAIN: "eshraqatalmustaqbal.com"
+  SUPABASE_DOMAIN: "eshraqatalmustaqbal.com"
 
-  # ---- URLs derived from domains ----
-  SITE_URL: "https://example.com"
-  API_EXTERNAL_URL: "https://supabase.example.com"
-  SUPABASE_PUBLIC_URL: "https://supabase.example.com"
-  SUPABASE_URL: "https://supabase.example.com"
-  CORS_ORIGIN: "https://example.com,https://dashboard.example.com"
+  SITE_URL: "https://eshraqatalmustaqbal.com"
+  API_EXTERNAL_URL: "https://eshraqatalmustaqbal.com/supabase"
+  SUPABASE_PUBLIC_URL: "https://eshraqatalmustaqbal.com/supabase"
+  SUPABASE_URL: "https://eshraqatalmustaqbal.com/supabase"
+  CORS_ORIGIN: "https://eshraqatalmustaqbal.com,https://www.eshraqatalmustaqbal.com"
 
   # ---- Backend Runtime Configuration ----
   NODE_ENV: "production"
@@ -25,4 +24,3 @@ data:
   JWT_REFRESH_EXPIRES_IN: "30d"
   THROTTLE_TTL: "60"
   THROTTLE_LIMIT: "100"
-
