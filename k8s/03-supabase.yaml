@@ -84,33 +84,45 @@ spec:
       labels:
         app: supabase-db
     spec:
+      securityContext:
+        appArmorProfile:
+          type: Unconfined
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              if [ -d /var/lib/postgresql/data/pgdata ] && ! grep -q "0.0.0.0/0" /var/lib/postgresql/data/pgdata/pg_hba.conf 2>/dev/null; then
+                rm -rf /var/lib/postgresql/data/pgdata
+              fi
+              mkdir -p /var/lib/postgresql/data/pgdata
+              chown -R 70:70 /var/lib/postgresql/data
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
-          image: supabase/postgres:15.8.1.060
+          image: postgres:15-alpine
+          securityContext:
+            runAsUser: 70
+            runAsGroup: 70
           ports:
             - containerPort: 5432
               name: postgres
           env:
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
             - name: POSTGRES_USER
               value: "postgres"
             - name: POSTGRES_DB
               value: "postgres"
-            - name: POSTGRES_PORT
-              value: "5432"
-            - name: POSTGRES_HOST
-              value: "/var/run/postgresql"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: backend-secrets
                   key: POSTGRES_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: backend-secrets
-                  key: SUPABASE_JWT_SECRET
-            - name: JWT_EXP
-              value: "3600"
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
