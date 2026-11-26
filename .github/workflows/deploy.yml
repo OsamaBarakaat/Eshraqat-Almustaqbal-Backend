@@ -17,10 +17,17 @@ env:
   K8S_NAMESPACE: eshraqat
   DEPLOYMENT_NAME: eshraqat-backend
   CONTAINER_NAME: backend
+  SSH_HOST: 79.72.6.51
+  SSH_USER: ubuntu
+  # Owner of the PAT stored in the GHCR_TOKEN secret (must match the token's owner)
+  GHCR_PULL_USER: osamabarakaat
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-backend-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -53,15 +60,17 @@ jobs:
       - name: Deploy Backend & Supabase manifests to k3s cluster (eshraqat)
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST || '80.225.65.121' }}
-          SSH_USER: ${{ secrets.SSH_USER || 'ubuntu' }}
+          # Use a PAT with read:packages; GITHUB_TOKEN expires after the job
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "${SSH_PRIVATE_KEY}" ]; then
             echo "ERROR: SSH_PRIVATE_KEY secret is empty or not set!"
             exit 1
           fi
+
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
           if printf '%s' "${SSH_PRIVATE_KEY}" | grep -q "BEGIN"; then
             printf '%s\n' "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_ed25519
           elif printf '%s' "${SSH_PRIVATE_KEY}" | tr -d ' \n\r' | base64 -d 2>/dev/null | grep -q "BEGIN"; then
@@ -74,16 +83,20 @@ jobs:
             } > ~/.ssh/id_ed25519
           fi
           chmod 600 ~/.ssh/id_ed25519
+
           if ! ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
-            echo "ERROR: SSH_PRIVATE_KEY in GitHub Secrets is incomplete or corrupted (received $(printf '%s\n' "${SSH_PRIVATE_KEY}" | wc -l) lines; ~/.ssh/id_rsa has 38 lines)."
+            echo "ERROR: SSH_PRIVATE_KEY in GitHub Secrets is incomplete or corrupted (received $(printf '%s\n' "${SSH_PRIVATE_KEY}" | wc -l) lines)."
             exit 1
           fi
+
           ssh-keyscan -H "${SSH_HOST}" >> ~/.ssh/known_hosts
 
-          ssh "${SSH_USER}@${SSH_HOST}" "mkdir -p ~/k8s-backend"
-          scp -r k8s/* "${SSH_USER}@${SSH_HOST}:~/k8s-backend/"
+          SSH_OPTS="-i ${HOME}/.ssh/id_ed25519 -o BatchMode=yes -o ConnectTimeout=15"
 
-          ssh "${SSH_USER}@${SSH_HOST}" << EOF
+          ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" "mkdir -p ~/k8s-backend"
+          scp ${SSH_OPTS} -r k8s/* "${SSH_USER}@${SSH_HOST}:~/k8s-backend/"
+
+          ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" << EOF
             set -e
             cd ~/k8s-backend
 
@@ -108,7 +121,7 @@ jobs:
             # 4. Ensure GHCR pull secret exists
             sudo kubectl -n ${K8S_NAMESPACE} create secret docker-registry ghcr-secret \
               --docker-server=${REGISTRY} \
-              --docker-username=${GITHUB_ACTOR} \
+              --docker-username=${GHCR_PULL_USER} \
               --docker-password=${GHCR_PULL_TOKEN} \
               --dry-run=client -o yaml | sudo kubectl apply -f -
 
@@ -118,5 +131,10 @@ jobs:
             # 6. Roll out the newly built Backend image
             sudo kubectl -n ${K8S_NAMESPACE} set image deployment/${DEPLOYMENT_NAME} \
               ${CONTAINER_NAME}=${IMAGE_NAME}:${GITHUB_SHA}
+
             sudo kubectl -n ${K8S_NAMESPACE} rollout status deployment/${DEPLOYMENT_NAME} --timeout=180s
           EOF
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
