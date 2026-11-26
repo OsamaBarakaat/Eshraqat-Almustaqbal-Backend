@@ -45,6 +45,9 @@ spec:
       labels:
         app: eshraqat-backend
     spec:
+      securityContext:
+        appArmorProfile:
+          type: Unconfined
       imagePullSecrets:
         - name: ghcr-secret
       initContainers:
@@ -55,6 +58,7 @@ spec:
         - name: backend
           image: ghcr.io/osamabarakaat/eshraqat-almustaqbal-backend:latest
           imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "npx prisma db push --skip-generate && if [ -f dist/src/main.js ]; then exec node dist/src/main.js; else exec node dist/main.js; fi"]
           ports:
             - containerPort: 4000
               name: http
