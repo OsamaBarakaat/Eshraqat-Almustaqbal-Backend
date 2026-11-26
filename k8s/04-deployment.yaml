@@ -54,7 +54,7 @@ spec:
       containers:
         - name: backend
           image: ghcr.io/osamabarakaat/eshraqat-almustaqbal-backend:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4000
               name: http
